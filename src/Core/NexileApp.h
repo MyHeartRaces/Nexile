@@ -5,6 +5,9 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <thread>
+#include <atomic>
+#include <chrono>
 
 #include "UI/OverlayWindow.h"
 #include "Modules/ModuleInterface.h"
@@ -66,6 +69,9 @@ namespace Nexile {
         // Get profile manager
         ProfileManager* GetProfileManager() { return m_profileManager.get(); }
 
+        // Update activity timestamp to prevent idle mode
+        void UpdateActivityTimestamp();
+
     private:
         // Initialize the application window
         void InitializeWindow();
@@ -81,6 +87,21 @@ namespace Nexile {
 
         // Remove icon from system tray
         void RemoveTrayIcon();
+
+        // Show settings dialog
+        void ShowSettingsDialog();
+
+        // Load modules from a directory
+        void LoadModulesFromDirectory(const std::string& directory);
+
+        // Load a module from a DLL file
+        bool LoadModuleFromDLL(const std::string& dllPath);
+
+        // Load modules for a specific game
+        void LoadModulesForGame(GameID gameId);
+
+        // Idle timer thread function
+        void IdleTimerThreadFunc();
 
     private:
         // Static instance for window procedure
@@ -107,6 +128,9 @@ namespace Nexile {
         // Loaded modules
         std::unordered_map<std::string, std::shared_ptr<IModule>> m_modules;
 
+        // Loaded module DLL handles
+        std::unordered_map<std::string, HMODULE> m_moduleHandles;
+
         // Current active game
         GameID m_activeGame = GameID::None;
 
@@ -115,6 +139,12 @@ namespace Nexile {
 
         // Tray icon data
         NOTIFYICONDATA m_trayIconData = {};
+
+        // Idle timer thread and related variables
+        std::thread m_idleTimerThread;
+        std::atomic<bool> m_stopIdleTimer;
+        std::chrono::steady_clock::time_point m_lastActivityTime;
+        bool m_idleTimerStarted;
 
         // Custom tray message ID
         static const UINT WM_TRAYICON = WM_USER + 1;
