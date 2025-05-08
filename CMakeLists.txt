@@ -1,14 +1,17 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 project(Nexile VERSION 0.1.0)
-
-# Add custom modules path
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add WebView2 SDK
+# Add custom modules path
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
+
+# Make sure src directory is in include path
+include_directories(${CMAKE_SOURCE_DIR}/src)
+
+# Always use FetchContent for WebView2 since vcpkg integration seems problematic
 include(FetchContent)
 FetchContent_Declare(
     WebView2
@@ -21,12 +24,32 @@ FetchContent_MakeAvailable(WebView2)
 set(WEBVIEW2_INCLUDE_DIR "${webview2_SOURCE_DIR}/build/native/include")
 file(GLOB WEBVIEW2_LIBRARY "${webview2_SOURCE_DIR}/build/native/x64/WebView2LoaderStatic.lib")
 
-# Find nlohmann/json
-find_package(NlohmannJson REQUIRED)
+# Try to find nlohmann/json - first with vcpkg if used, then with FindNlohmannJson module
+if(DEFINED ENV{VCPKG_ROOT} OR DEFINED VCPKG_TARGET_TRIPLET)
+    # Try with vcpkg, but don't require it
+    find_package(nlohmann_json CONFIG)
+endif()
+
+# If not found via vcpkg, use our custom module
+if(NOT nlohmann_json_FOUND)
+    find_package(NlohmannJson)
+    if(NlohmannJson_FOUND)
+        # Create compatibility target
+        if(NOT TARGET nlohmann_json::nlohmann_json AND TARGET nlohmann::json)
+            add_library(nlohmann_json::nlohmann_json ALIAS nlohmann::json)
+        endif()
+    else()
+        # Manual include path for nlohmann/json as a last resort
+        message(STATUS "Using fallback method for nlohmann/json")
+        include_directories(C:/json/include)
+        # Create a dummy target for compatibility
+        add_library(nlohmann_json_dummy INTERFACE)
+        add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json_dummy)
+    endif()
+endif()
 
 # Include directories
 include_directories(
-    ${CMAKE_SOURCE_DIR}/src
     ${WEBVIEW2_INCLUDE_DIR}
 )
 
@@ -39,7 +62,7 @@ file(GLOB_RECURSE SOURCES
 # Resource files
 set(RESOURCE_FILES 
     "src/Resources.rc"
-)
+ "src/Utils/Logger.h")
 
 # HTML and CSS resources
 set(HTML_RESOURCES
@@ -48,12 +71,12 @@ set(HTML_RESOURCES
 )
 
 # Create executable
-add_executable(Nexile WIN32 ${SOURCES} ${RESOURCE_FILES})
+add_executable(Nexile WIN32 ${SOURCES} ${RESOURCE_FILES} "src/Utils/Logger.h")
 
 # Link libraries
-target_link_libraries(Nexile
+target_link_libraries(Nexile PRIVATE
     ${WEBVIEW2_LIBRARY}
-    nlohmann::json
+    nlohmann_json::nlohmann_json
     Shlwapi.lib
     Version.lib
     Ole32.lib
@@ -93,14 +116,3 @@ add_custom_command(TARGET Nexile POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
     "${CMAKE_BINARY_DIR}/bin/Profiles"
 )
-
-# Setting up packaging with CPack
-set(CPACK_PACKAGE_NAME "Nexile")
-set(CPACK_PACKAGE_VENDOR "Nexile")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Modular overlay assistant for Action RPGs")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "Nexile")
-set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-set(CPACK_NSIS_DISPLAY_NAME "Nexile - Game Overlay Assistant")
-
-include(CPack)

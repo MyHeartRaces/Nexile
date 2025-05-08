@@ -44,7 +44,8 @@ namespace Nexile {
 
         std::string GetAppDataPath() {
             wchar_t appDataPath[MAX_PATH];
-            SHGetFolderPath(NULL, CSIDL_APPDATA, NULL, 0, appDataPath);
+            // Use the W version to match the wchar_t buffer
+            SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appDataPath);
 
             std::wstring wpath = std::wstring(appDataPath) + L"\\Nexile";
             return WideStringToString(wpath);
@@ -52,7 +53,8 @@ namespace Nexile {
 
         std::string GetModulePath() {
             wchar_t path[MAX_PATH];
-            GetModuleFileName(NULL, path, MAX_PATH);
+            // Use the W version to match the wchar_t buffer
+            GetModuleFileNameW(NULL, path, MAX_PATH);
 
             std::wstring wpath(path);
             size_t lastBackslash = wpath.find_last_of(L'\\');
@@ -245,7 +247,8 @@ namespace Nexile {
             }
 
             wchar_t className[256] = {};
-            GetClassName(hwnd, className, 256);
+            // Use the W version to match the wchar_t buffer
+            GetClassNameW(hwnd, className, 256);
 
             return std::wstring(className);
         }
@@ -255,20 +258,22 @@ namespace Nexile {
                 return L"";
             }
 
-            int length = GetWindowTextLength(hwnd);
+            int length = GetWindowTextLengthW(hwnd);
             if (length == 0) {
                 return L"";
             }
 
             std::vector<wchar_t> buffer(length + 1);
-            GetWindowText(hwnd, buffer.data(), length + 1);
+            // Use the W version to match the wchar_t buffer
+            GetWindowTextW(hwnd, buffer.data(), length + 1);
 
             return std::wstring(buffer.data());
         }
 
         bool ReadRegistryString(HKEY hKey, const std::wstring& subKey, const std::wstring& valueName, std::wstring& value) {
             HKEY key;
-            LONG result = RegOpenKeyEx(hKey, subKey.c_str(), 0, KEY_READ, &key);
+            // Use the W version to match the wstring parameters
+            LONG result = RegOpenKeyExW(hKey, subKey.c_str(), 0, KEY_READ, &key);
             if (result != ERROR_SUCCESS) {
                 return false;
             }
@@ -276,8 +281,8 @@ namespace Nexile {
             DWORD type;
             DWORD size = 0;
 
-            // Get size first
-            result = RegQueryValueEx(key, valueName.c_str(), NULL, &type, NULL, &size);
+            // Get size first (using W version)
+            result = RegQueryValueExW(key, valueName.c_str(), NULL, &type, NULL, &size);
             if (result != ERROR_SUCCESS || type != REG_SZ) {
                 RegCloseKey(key);
                 return false;
@@ -286,8 +291,8 @@ namespace Nexile {
             // Allocate buffer
             std::vector<wchar_t> buffer(size / sizeof(wchar_t) + 1, 0);
 
-            // Read value
-            result = RegQueryValueEx(key, valueName.c_str(), NULL, NULL, reinterpret_cast<LPBYTE>(buffer.data()), &size);
+            // Read value (using W version)
+            result = RegQueryValueExW(key, valueName.c_str(), NULL, NULL, reinterpret_cast<LPBYTE>(buffer.data()), &size);
             RegCloseKey(key);
 
             if (result != ERROR_SUCCESS) {
@@ -300,12 +305,14 @@ namespace Nexile {
 
         bool WriteRegistryString(HKEY hKey, const std::wstring& subKey, const std::wstring& valueName, const std::wstring& value) {
             HKEY key;
-            LONG result = RegCreateKeyEx(hKey, subKey.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, NULL);
+            // Use the W version to match the wstring parameters
+            LONG result = RegCreateKeyExW(hKey, subKey.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, NULL);
             if (result != ERROR_SUCCESS) {
                 return false;
             }
 
-            result = RegSetValueEx(key, valueName.c_str(), 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()), (DWORD)((value.size() + 1) * sizeof(wchar_t)));
+            // Use the W version to match the wstring parameters
+            result = RegSetValueExW(key, valueName.c_str(), 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()), (DWORD)((value.size() + 1) * sizeof(wchar_t)));
             RegCloseKey(key);
 
             return result == ERROR_SUCCESS;
@@ -313,7 +320,8 @@ namespace Nexile {
 
         bool ReadRegistryDword(HKEY hKey, const std::wstring& subKey, const std::wstring& valueName, DWORD& value) {
             HKEY key;
-            LONG result = RegOpenKeyEx(hKey, subKey.c_str(), 0, KEY_READ, &key);
+            // Use the W version to match the wstring parameters
+            LONG result = RegOpenKeyExW(hKey, subKey.c_str(), 0, KEY_READ, &key);
             if (result != ERROR_SUCCESS) {
                 return false;
             }
@@ -321,7 +329,8 @@ namespace Nexile {
             DWORD type;
             DWORD size = sizeof(DWORD);
 
-            result = RegQueryValueEx(key, valueName.c_str(), NULL, &type, reinterpret_cast<LPBYTE>(&value), &size);
+            // Use the W version to match the wstring parameters
+            result = RegQueryValueExW(key, valueName.c_str(), NULL, &type, reinterpret_cast<LPBYTE>(&value), &size);
             RegCloseKey(key);
 
             return result == ERROR_SUCCESS && type == REG_DWORD;
@@ -329,12 +338,14 @@ namespace Nexile {
 
         bool WriteRegistryDword(HKEY hKey, const std::wstring& subKey, const std::wstring& valueName, DWORD value) {
             HKEY key;
-            LONG result = RegCreateKeyEx(hKey, subKey.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, NULL);
+            // Use the W version to match the wstring parameters
+            LONG result = RegCreateKeyExW(hKey, subKey.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key, NULL);
             if (result != ERROR_SUCCESS) {
                 return false;
             }
 
-            result = RegSetValueEx(key, valueName.c_str(), 0, REG_DWORD, reinterpret_cast<const BYTE*>(&value), sizeof(DWORD));
+            // Use the W version to match the wstring parameters
+            result = RegSetValueExW(key, valueName.c_str(), 0, REG_DWORD, reinterpret_cast<const BYTE*>(&value), sizeof(DWORD));
             RegCloseKey(key);
 
             return result == ERROR_SUCCESS;

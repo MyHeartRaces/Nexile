@@ -1,9 +1,9 @@
 #include <windows.h>
 #include "UI/Resources.h"
 
-// Icons
-IDI_NEXILE_ICON        ICON    "resources/icon.ico"
-IDI_NEXILE_ICON_SMALL  ICON    "resources/icon_small.ico"
+// Comment out icon definitions for now - will be implemented later
+// IDI_NEXILE_ICON        ICON    "resources/icon.ico"
+// IDI_NEXILE_ICON_SMALL  ICON    "resources/icon_small.ico"
 
 // Version Information
 VS_VERSION_INFO VERSIONINFO

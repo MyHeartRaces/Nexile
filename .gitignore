@@ -93,6 +93,10 @@ _deps/
 /build/
 /out/
 .cache/
+vcpkg_installed/
+buildtrees/
+packages/
+downloads/
 
 # Misc
 .DS_Store

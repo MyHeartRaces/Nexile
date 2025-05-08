@@ -279,7 +279,8 @@ namespace Nexile {
     std::string ProfileManager::GetProfileFilePath() {
         // Get AppData folder
         wchar_t appDataPath[MAX_PATH];
-        SHGetFolderPath(NULL, CSIDL_APPDATA, NULL, 0, appDataPath);
+        // Use the W version to match the wchar_t buffer
+        SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appDataPath);
 
         // Create path to profiles.json
         std::wstring wpath = std::wstring(appDataPath) + L"\\Nexile\\profiles.json";

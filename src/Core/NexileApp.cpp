@@ -4,10 +4,10 @@
 #include <thread>
 #include <chrono>
 
-#include "Modules/PriceCheckModule.h"
-#include "UI/Resources.h"
-#include "Utils/Utils.h"
-#include "Utils/Logger.h"
+#include "../Modules/PriceCheckModule.h"
+#include "../UI/Resources.h"
+#include "../Utils/Utils.h"
+#include "../Utils/Logger.h"
 
 namespace Nexile {
 
@@ -77,21 +77,22 @@ namespace Nexile {
     }
 
     void NexileApp::RegisterWindowClass() {
-        WNDCLASSEX wcex = {};
-        wcex.cbSize = sizeof(WNDCLASSEX);
+        WNDCLASSEXW wcex = {};
+        wcex.cbSize = sizeof(WNDCLASSEXW);
         wcex.style = CS_HREDRAW | CS_VREDRAW;
         wcex.lpfnWndProc = WindowProc;
         wcex.cbClsExtra = 0;
         wcex.cbWndExtra = 0;
         wcex.hInstance = m_hInstance;
-        wcex.hIcon = LoadIcon(m_hInstance, MAKEINTRESOURCE(IDI_NEXILE_ICON));
+        // Use standard application icon instead of custom icon
+        wcex.hIcon = LoadIcon(NULL, IDI_APPLICATION);
         wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
         wcex.lpszMenuName = nullptr;
         wcex.lpszClassName = L"NexileMainClass";
-        wcex.hIconSm = LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_NEXILE_ICON_SMALL));
+        wcex.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
 
-        if (!RegisterClassEx(&wcex)) {
+        if (!RegisterClassExW(&wcex)) {
             DWORD error = GetLastError();
             LOG_ERROR("Failed to register window class, error code: {}", error);
             throw std::runtime_error("Failed to register window class");
@@ -103,7 +104,7 @@ namespace Nexile {
         RegisterWindowClass();
 
         // Create main window (hidden, just for messages)
-        m_mainWindow = CreateWindow(
+        m_mainWindow = CreateWindowW(
             L"NexileMainClass",
             L"Nexile Controller",
             WS_OVERLAPPEDWINDOW,
@@ -206,11 +207,11 @@ namespace Nexile {
             if (hMenu) {
                 UpdateActivityTimestamp();
 
-                // Add menu items
-                InsertMenu(hMenu, 0, MF_BYPOSITION | MF_STRING, IDM_TOGGLE_OVERLAY, L"Toggle Overlay");
-                InsertMenu(hMenu, 1, MF_BYPOSITION | MF_STRING, IDM_SETTINGS, L"Settings");
-                InsertMenu(hMenu, 2, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
-                InsertMenu(hMenu, 3, MF_BYPOSITION | MF_STRING, IDM_EXIT, L"Exit");
+                // Add menu items - use InsertMenuW for Unicode support
+                InsertMenuW(hMenu, 0, MF_BYPOSITION | MF_STRING, IDM_TOGGLE_OVERLAY, L"Toggle Overlay");
+                InsertMenuW(hMenu, 1, MF_BYPOSITION | MF_STRING, IDM_SETTINGS, L"Settings");
+                InsertMenuW(hMenu, 2, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
+                InsertMenuW(hMenu, 3, MF_BYPOSITION | MF_STRING, IDM_EXIT, L"Exit");
 
                 // Set default item
                 SetMenuDefaultItem(hMenu, IDM_TOGGLE_OVERLAY, FALSE);
@@ -225,24 +226,47 @@ namespace Nexile {
     }
 
     void NexileApp::AddTrayIcon() {
-        m_trayIconData = {};
-        m_trayIconData.cbSize = sizeof(NOTIFYICONDATA);
-        m_trayIconData.hWnd = m_mainWindow;
-        m_trayIconData.uID = 1;
-        m_trayIconData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-        m_trayIconData.uCallbackMessage = WM_TRAYICON;
-        m_trayIconData.hIcon = LoadIcon(m_hInstance, MAKEINTRESOURCE(IDI_NEXILE_ICON_SMALL));
-        wcscpy_s(m_trayIconData.szTip, L"Nexile - Game Overlay");
+        // Determine whether we're compiling with UNICODE
+#ifdef UNICODE
+        NOTIFYICONDATAW nid = {}; // Use the Unicode version
+        nid.cbSize = sizeof(NOTIFYICONDATAW);
+        nid.hWnd = m_mainWindow;
+        nid.uID = 1;
+        nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        nid.uCallbackMessage = WM_TRAYICON;
+        nid.hIcon = LoadIcon(m_hInstance, MAKEINTRESOURCE(IDI_NEXILE_ICON_SMALL));
+        wcscpy_s(nid.szTip, L"Nexile - Game Overlay");
 
-        if (!Shell_NotifyIcon(NIM_ADD, &m_trayIconData)) {
+        if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
             DWORD error = GetLastError();
             LOG_WARNING("Failed to add tray icon, error code: {}", error);
         }
+        m_trayIconData = nid;
+#else
+        NOTIFYICONDATAA nid = {}; // Use the ANSI version
+        nid.cbSize = sizeof(NOTIFYICONDATAA);
+        nid.hWnd = m_mainWindow;
+        nid.uID = 1;
+        nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        nid.uCallbackMessage = WM_TRAYICON;
+        nid.hIcon = LoadIcon(m_hInstance, MAKEINTRESOURCE(IDI_NEXILE_ICON_SMALL));
+        strcpy_s(nid.szTip, "Nexile - Game Overlay");
+
+        if (!Shell_NotifyIconA(NIM_ADD, &nid)) {
+            DWORD error = GetLastError();
+            LOG_WARNING("Failed to add tray icon, error code: {}", error);
+        }
+        m_trayIconData = nid;
+#endif
     }
 
     void NexileApp::RemoveTrayIcon() {
         if (m_trayIconData.cbSize > 0) {
-            Shell_NotifyIcon(NIM_DELETE, &m_trayIconData);
+#ifdef UNICODE
+            Shell_NotifyIconW(NIM_DELETE, &m_trayIconData);
+#else
+            Shell_NotifyIconA(NIM_DELETE, &m_trayIconData);
+#endif
         }
     }
 
@@ -374,7 +398,7 @@ namespace Nexile {
         std::wstring wDllPath = Utils::StringToWideString(dllPath);
 
         // Load the DLL
-        HMODULE hModule = LoadLibrary(wDllPath.c_str());
+        HMODULE hModule = LoadLibraryW(wDllPath.c_str());
         if (!hModule) {
             DWORD error = GetLastError();
             LOG_ERROR("Failed to load DLL {}, error code: {}", dllPath, error);
