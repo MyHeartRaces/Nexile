@@ -93,7 +93,6 @@ namespace Nexile {
         SetLayeredWindowAttributes(m_hwnd, 0, 230, LWA_ALPHA);
     }
 
-    // Only the InitializeWebView method with HRESULT conversion fix
     void OverlayWindow::InitializeWebView() {
         // Get WebView2 environment
         std::wstring userDataFolder;
@@ -103,13 +102,15 @@ namespace Nexile {
         if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appDataPath))) {
             userDataFolder = std::wstring(appDataPath) + L"\\Nexile\\WebView2Data";
             CreateDirectoryW(userDataFolder.c_str(), NULL);
+            LOG_INFO("WebView2 user data folder: {}", Utils::WideStringToString(userDataFolder));
         }
         else {
             userDataFolder = L"WebView2Data";
+            LOG_WARNING("Failed to get AppData path, using local folder for WebView2 data");
         }
 
-        // Create WebView2 environment - without storing the HRESULT
-        // This prevents the "cannot convert from 'void' to 'HRESULT'" error
+        // Create WebView2 environment
+        LOG_INFO("Creating WebView2 environment...");
         CreateCoreWebView2EnvironmentWithOptions(
             NULL,
             userDataFolder.c_str(),
@@ -117,6 +118,8 @@ namespace Nexile {
             Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
                 [this](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
                     if (SUCCEEDED(result) && environment) {
+                        LOG_INFO("WebView2 environment created successfully");
+
                         // Store environment
                         m_webViewEnvironment = environment;
 
@@ -126,6 +129,8 @@ namespace Nexile {
                             Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
                                 [this](HRESULT result, ICoreWebView2Controller* controller) -> HRESULT {
                                     if (SUCCEEDED(result) && controller) {
+                                        LOG_INFO("WebView2 controller created successfully");
+
                                         // Store controller
                                         m_webViewController = controller;
 
@@ -136,14 +141,28 @@ namespace Nexile {
                                             // Setup event handlers
                                             SetupWebViewEventHandlers();
 
-                                            // Navigate to initial page
-                                            Navigate(L"about:blank");
+                                            // Set bounds
+                                            RECT bounds;
+                                            GetClientRect(m_hwnd, &bounds);
+                                            m_webViewController->put_Bounds(bounds);
+
+                                            // Navigate to initial HTML page
+                                            LoadMainOverlayUI();
                                         }
+                                        else {
+                                            LOG_ERROR("Failed to get CoreWebView2 interface");
+                                        }
+                                    }
+                                    else {
+                                        LOG_ERROR("Failed to create WebView2 controller, HRESULT: 0x{:X}", static_cast<unsigned int>(result));
                                     }
                                     return S_OK;
                                 }
                             ).Get()
                         );
+                    }
+                    else {
+                        LOG_ERROR("Failed to create WebView2 environment, HRESULT: 0x{:X}", static_cast<unsigned int>(result));
                     }
                     return S_OK;
                 }
@@ -151,8 +170,52 @@ namespace Nexile {
         );
     }
 
+    void OverlayWindow::LoadMainOverlayUI() {
+        if (!m_webView) {
+            LOG_ERROR("Cannot load main overlay UI: WebView2 not initialized");
+            return;
+        }
+
+        // Get path to HTML file
+        std::string htmlPath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\main_overlay.html");
+        LOG_INFO("Loading main overlay HTML from: {}", htmlPath);
+
+        if (!Utils::FileExists(htmlPath)) {
+            LOG_ERROR("Main overlay HTML file not found: {}", htmlPath);
+
+            // Try alternative path
+            htmlPath = Utils::CombinePath(Utils::GetModulePath(), "..\\HTML\\main_overlay.html");
+            LOG_INFO("Trying alternative path: {}", htmlPath);
+
+            if (!Utils::FileExists(htmlPath)) {
+                LOG_ERROR("Alternative path also failed, creating default HTML content");
+                // Create simple HTML content
+                std::wstring defaultHTML = L"<html><head><title>Nexile Overlay</title>"
+                    L"<style>body { background-color: rgba(30, 30, 30, 0.8); color: white; "
+                    L"font-family: Arial; padding: 20px; }</style></head>"
+                    L"<body><h1>Nexile Overlay</h1>"
+                    L"<p>Press Alt+D to check item prices in Path of Exile</p></body></html>";
+                m_webView->NavigateToString(defaultHTML.c_str());
+                return;
+            }
+        }
+
+        // Convert to wide string for WebView2
+        std::wstring wHtmlPath = Utils::StringToWideString(htmlPath);
+
+        // Create file URL
+        std::wstring fileUrl = L"file:///" + wHtmlPath;
+
+        // Replace backslashes with forward slashes
+        std::replace(fileUrl.begin(), fileUrl.end(), L'\\', L'/');
+
+        LOG_INFO("Navigating to: {}", Utils::WideStringToString(fileUrl));
+        m_webView->Navigate(fileUrl.c_str());
+    }
+
     void OverlayWindow::SetupWebViewEventHandlers() {
         if (!m_webView) {
+            LOG_ERROR("Cannot setup WebView event handlers: WebView2 not initialized");
             return;
         }
 
@@ -165,6 +228,7 @@ namespace Nexile {
 
                     if (messageRaw) {
                         std::wstring message = messageRaw.get();
+                        LOG_DEBUG("Received web message: {}", Utils::WideStringToString(message));
                         HandleWebMessage(message);
                     }
                     return S_OK;
@@ -178,10 +242,20 @@ namespace Nexile {
             L"window.chrome.webview.addEventListener('message', event => { window.postMessage(event.data, '*'); });",
             nullptr
         );
+
+        // Enable dev tools in debug mode
+#ifdef _DEBUG
+        m_webView->OpenDevToolsWindow();
+        LOG_INFO("DevTools window opened for WebView2");
+#endif
+
+        LOG_INFO("WebView2 event handlers setup complete");
     }
 
     void OverlayWindow::HandleWebMessage(const std::wstring& message) {
         // Process message from WebView
+        LOG_DEBUG("Processing web message: {}", Utils::WideStringToString(message));
+
         std::lock_guard<std::mutex> lock(m_callbackMutex);
         for (const auto& callback : m_webMessageCallbacks) {
             callback(message);
@@ -195,24 +269,37 @@ namespace Nexile {
 
     void OverlayWindow::Show() {
         if (!m_hwnd) {
+            LOG_ERROR("Cannot show overlay: window not initialized");
             return;
         }
 
         m_visible = true;
         ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
+        LOG_INFO("Overlay window shown");
+
+        // Ensure WebView is properly sized
+        if (m_webViewController) {
+            RECT bounds;
+            GetClientRect(m_hwnd, &bounds);
+            m_webViewController->put_Bounds(bounds);
+            LOG_DEBUG("WebView bounds updated: {}x{}", bounds.right, bounds.bottom);
+        }
     }
 
     void OverlayWindow::Hide() {
         if (!m_hwnd) {
+            LOG_ERROR("Cannot hide overlay: window not initialized");
             return;
         }
 
         m_visible = false;
         ShowWindow(m_hwnd, SW_HIDE);
+        LOG_INFO("Overlay window hidden");
     }
 
     void OverlayWindow::SetPosition(const RECT& rect) {
         if (!m_hwnd || !m_webViewController) {
+            LOG_ERROR("Cannot set position: window or WebView controller not initialized");
             return;
         }
 
@@ -229,29 +316,44 @@ namespace Nexile {
 
         // Set WebView position
         m_webViewController->put_Bounds({ 0, 0, rect.right - rect.left, rect.bottom - rect.top });
+        LOG_DEBUG("Overlay position set to: {},{} - {}x{}", rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
     }
 
     void OverlayWindow::Navigate(const std::wstring& uri) {
         if (m_webView) {
+            LOG_INFO("Navigating WebView to: {}", Utils::WideStringToString(uri));
             m_webView->Navigate(uri.c_str());
+        }
+        else {
+            LOG_ERROR("Cannot navigate: WebView not initialized");
         }
     }
 
+    // Function for navigating to URL
+
     void OverlayWindow::ExecuteScript(const std::wstring& script) {
-        if (m_webView) {
-            m_webView->ExecuteScript(
-                script.c_str(),
-                Microsoft::WRL::Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
-                    [](HRESULT result, LPCWSTR resultObject) -> HRESULT {
-                        return S_OK;
-                    }
-                ).Get()
-            );
+        if (!m_webView) {
+            LOG_ERROR("Cannot execute script: WebView not initialized");
+            return;
         }
+
+        LOG_DEBUG("Executing script in WebView");
+        m_webView->ExecuteScript(
+            script.c_str(),
+            Microsoft::WRL::Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+                [](HRESULT result, LPCWSTR resultObject) -> HRESULT {
+                    if (FAILED(result)) {
+                        LOG_ERROR("Script execution failed, HRESULT: 0x{:X}", static_cast<unsigned int>(result));
+                    }
+                    return S_OK;
+                }
+            ).Get()
+        );
     }
 
     void OverlayWindow::SetClickThrough(bool clickThrough) {
         if (!m_hwnd) {
+            LOG_ERROR("Cannot set click-through: window not initialized");
             return;
         }
 
@@ -271,17 +373,52 @@ namespace Nexile {
 
         // Apply new style
         SetWindowLong(m_hwnd, GWL_EXSTYLE, exStyle);
+        LOG_INFO("Overlay click-through set to: {}", clickThrough);
     }
 
     void OverlayWindow::LoadModuleUI(const std::shared_ptr<IModule>& module) {
         if (!m_webView || !module) {
+            LOG_ERROR("Cannot load module UI: WebView or module not initialized");
             return;
         }
 
-        // Get HTML from module
+        std::string moduleId = module->GetModuleID();
+        LOG_INFO("Loading UI for module: {}", moduleId);
+
+        // First, try to load from file
+        std::string htmlFileName = moduleId + "_module.html";
+        std::string htmlPath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\" + htmlFileName);
+
+        if (Utils::FileExists(htmlPath)) {
+            LOG_INFO("Loading module HTML from file: {}", htmlPath);
+            std::string htmlContent = Utils::ReadTextFile(htmlPath);
+
+            if (!htmlContent.empty()) {
+                // Convert to wide string for WebView2
+                std::wstring wHtmlContent = Utils::StringToWideString(htmlContent);
+
+                // Use NavigateToString instead of data URL
+                if (m_webView) {
+                    LOG_DEBUG("Using NavigateToString for module HTML content");
+                    m_webView->NavigateToString(wHtmlContent.c_str());
+                    return;
+                }
+            }
+            else {
+                LOG_ERROR("Failed to read HTML content from file: {}", htmlPath);
+            }
+        }
+        else {
+            LOG_WARNING("Module HTML file not found: {}", htmlPath);
+        }
+
+        // If file loading failed, use module's GetModuleUIHTML method
+        LOG_INFO("Using module's GetModuleUIHTML method");
         std::string htmlContent = module->GetModuleUIHTML();
+
         if (htmlContent.empty()) {
             // Create default HTML
+            LOG_WARNING("Module returned empty HTML, creating default content");
             std::stringstream ss;
             ss << "<html><head><title>" << module->GetModuleName() << "</title>";
             ss << "<style>body { background-color: rgba(30, 30, 30, 0.8); color: white; font-family: Arial; padding: 20px; }</style>";
@@ -292,48 +429,16 @@ namespace Nexile {
             htmlContent = ss.str();
         }
 
-        // Convert to wide string
-        std::wstring wHtml = Utils::StringToWideString(htmlContent);
+        // Convert to wide string and load
+        std::wstring wHtmlContent = Utils::StringToWideString(htmlContent);
 
-        // Navigate to data URL
-        std::wstring encodedHtml;
-        for (wchar_t c : wHtml) {
-            if (c <= 127) {
-                if (c == L'"') encodedHtml += L"%22";
-                else if (c == L' ') encodedHtml += L"%20";
-                else if (c == L'<') encodedHtml += L"%3C";
-                else if (c == L'>') encodedHtml += L"%3E";
-                else if (c == L'#') encodedHtml += L"%23";
-                else if (c == L'%') encodedHtml += L"%25";
-                else if (c == L'{') encodedHtml += L"%7B";
-                else if (c == L'}') encodedHtml += L"%7D";
-                else if (c == L'|') encodedHtml += L"%7C";
-                else if (c == L'\\') encodedHtml += L"%5C";
-                else if (c == L'^') encodedHtml += L"%5E";
-                else if (c == L'~') encodedHtml += L"%7E";
-                else if (c == L'[') encodedHtml += L"%5B";
-                else if (c == L']') encodedHtml += L"%5D";
-                else if (c == L'`') encodedHtml += L"%60";
-                else if (c == L';') encodedHtml += L"%3B";
-                else if (c == L'/') encodedHtml += L"%2F";
-                else if (c == L'?') encodedHtml += L"%3F";
-                else if (c == L':') encodedHtml += L"%3A";
-                else if (c == L'@') encodedHtml += L"%40";
-                else if (c == L'=') encodedHtml += L"%3D";
-                else if (c == L'&') encodedHtml += L"%26";
-                else if (c == L'+') encodedHtml += L"%2B";
-                else encodedHtml += c;
-            }
-            else {
-                wchar_t buffer[8];
-                swprintf_s(buffer, L"%%%04X", static_cast<int>(c));
-                encodedHtml += buffer;
-            }
+        if (m_webView) {
+            LOG_DEBUG("Using NavigateToString for module HTML content");
+            m_webView->NavigateToString(wHtmlContent.c_str());
         }
-
-        // Navigate to data URL
-        std::wstring dataUrl = L"data:text/html;charset=utf-8," + encodedHtml;
-        Navigate(dataUrl);
+        else {
+            LOG_ERROR("WebView is nullptr, cannot load module UI");
+        }
     }
 
     std::wstring OverlayWindow::CreateModuleLoaderHTML() {
@@ -348,6 +453,7 @@ namespace Nexile {
                 RECT bounds;
                 GetClientRect(hwnd, &bounds);
                 m_webViewController->put_Bounds(bounds);
+                LOG_DEBUG("Resized WebView to: {}x{}", bounds.right, bounds.bottom);
             }
             return 0;
 
@@ -359,6 +465,7 @@ namespace Nexile {
                     m_webMessageReceivedToken.value = 0;
                 }
             }
+            LOG_INFO("Overlay window destroyed");
             return 0;
         }
 

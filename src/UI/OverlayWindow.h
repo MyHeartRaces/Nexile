@@ -50,6 +50,9 @@ namespace Nexile {
         // Load a module's UI into the overlay
         void LoadModuleUI(const std::shared_ptr<IModule>& module);
 
+        // Load main overlay UI
+        void LoadMainOverlayUI();
+
         // Window procedure for overlay window
         static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
