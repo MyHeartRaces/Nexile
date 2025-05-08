@@ -1,0 +1,40 @@
+#include <windows.h>
+#include "UI/Resources.h"
+
+// Icons
+IDI_NEXILE_ICON        ICON    "resources/icon.ico"
+IDI_NEXILE_ICON_SMALL  ICON    "resources/icon_small.ico"
+
+// Version Information
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0, 1, 0, 0
+PRODUCTVERSION 0, 1, 0, 0
+FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+FILEFLAGS 0x1L
+#else
+FILEFLAGS 0x0L
+#endif
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+BLOCK "StringFileInfo"
+BEGIN
+BLOCK "040904b0"
+BEGIN
+VALUE "CompanyName", "Nexile Team"
+VALUE "FileDescription", "Nexile - Game Overlay Assistant"
+VALUE "FileVersion", "0.1.0.0"
+VALUE "InternalName", "Nexile.exe"
+VALUE "LegalCopyright", "Copyright (C) 2025"
+VALUE "OriginalFilename", "Nexile.exe"
+VALUE "ProductName", "Nexile"
+VALUE "ProductVersion", "0.1.0.0"
+END
+END
+BLOCK "VarFileInfo"
+BEGIN
+VALUE "Translation", 0x409, 1200
+END
+END

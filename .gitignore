@@ -1,0 +1,111 @@
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+build/
+_build/
+cmake-build-*/
+out/
+third_party/
+
+
+# Visual Studio 2022 cache/options directory
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+*.db
+*.opendb
+ipch/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio 2022 project files
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+.vs/
+
+# VS Code settings
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# C++ specific ignores
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Generated sources
+WebView2*
+
+# Dependencies
+_deps/
+
+# Custom user data directories
+/bin/
+/build/
+/out/
+.cache/
+
+# Misc
+.DS_Store
+thumbs.db
+Desktop.ini
+
+# Windows specific
+*.tmp
+*~
+
+# Log files
+*.log
+
+# Project specific
+Nexile.dir/
+Nexile_autogen/
