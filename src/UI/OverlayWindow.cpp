@@ -9,9 +9,9 @@
 #include <sstream>
 #include <fstream>
 #include <ShlObj.h>
-#include <Shlwapi.h>          // SHCreateDirectoryExW, PathFileExistsW
-#include <wrl.h>              // Microsoft::WRL::Callback
-#include <wil/com.h>          // wil::com_ptr helpers
+#include <Shlwapi.h>    
+#include <wrl.h>   
+#include <wil/com.h>    
 #include <algorithm>
 
 #pragma comment(lib, "Shlwapi.lib")
@@ -51,12 +51,21 @@ namespace Nexile {
     // =============================================================
     OverlayWindow::OverlayWindow(NexileApp* app)
         : m_app(app), m_hwnd(nullptr), m_visible(false), m_clickThrough(true) {
+        // Initialize COM for this thread
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to initialize COM, HRESULT: {}", HResultToHex(hr));
+        }
+
         InitializeWindow();
         InitializeWebView();
     }
 
     OverlayWindow::~OverlayWindow() {
         if (m_hwnd) DestroyWindow(m_hwnd);
+
+        // Uninitialize COM
+        CoUninitialize();
     }
 
     // =============================================================
@@ -85,11 +94,13 @@ namespace Nexile {
         if (!m_hwnd) throw std::runtime_error("Failed to create overlay window");
 
         SetWindowLongPtr(m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
-        SetLayeredWindowAttributes(m_hwnd, 0, 230, LWA_ALPHA);
+
+        // Use a black background with proper transparency (alpha: 200)
+        SetLayeredWindowAttributes(m_hwnd, 0, 200, LWA_ALPHA);
     }
 
     // =============================================================
-    // WebView2 initialisation (with bundled fallback runtime)
+    // WebView2 initialisation (with bundled runtime)
     // =============================================================
     void OverlayWindow::InitializeWebView() {
         // --- user-data folder (%APPDATA%\Nexile\WebView2Data)
@@ -105,73 +116,73 @@ namespace Nexile {
             LOG_WARNING("Could not resolve %%APPDATA%%, using local WebView2Data folder");
         }
 
-        // --- decide which runtime to use ---------------------------------------------------
-        wil::unique_cotaskmem_string sysVersion;
-        HRESULT hrProbe = GetAvailableCoreWebView2BrowserVersionString(nullptr, &sysVersion);
-
+        // --- use bundled WebView2 runtime ---------------------------------------------------
         std::wstring runtimeDir = Utils::StringToWideString(
-            Utils::CombinePath(Utils::GetModulePath(), "webview2_runtime"));
+            Utils::CombinePath(Utils::GetModulePath(), "..\\..\\..\\..\\third_party\\webview2"));
 
         bool bundleExists = PathFileExistsW((runtimeDir + L"\\msedgewebview2.exe").c_str());
-        const wchar_t* browserFolder = nullptr;
-        if (hrProbe == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) && bundleExists) {
-            browserFolder = runtimeDir.c_str();
-            LOG_INFO("System WebView2 runtime not found – falling back to bundled runtime at {}", Utils::WideStringToString(runtimeDir));
+        if (!bundleExists) {
+            LOG_ERROR("Bundled WebView2 runtime not found at {}", Utils::WideStringToString(runtimeDir));
+            MessageBoxW(nullptr,
+                L"Bundled WebView2 runtime not found.\n"
+                L"Please ensure the application was installed correctly.",
+                L"Nexile – WebView2 error", MB_ICONERROR);
+            return;
         }
 
-        // --- lambda that actually creates the environment ----------------------------------
-        auto createEnvironment = [&](const wchar_t* browserExeFolder, const wchar_t* dataFolder) -> HRESULT {
-            return CreateCoreWebView2EnvironmentWithOptions(
-                browserExeFolder, dataFolder, nullptr,
-                Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-                    [this](HRESULT hrEnv, ICoreWebView2Environment* env) -> HRESULT {
-                        if (FAILED(hrEnv) || !env) {
-                            LOG_ERROR("Failed to create WebView2 environment, HRESULT: {}", HResultToHex(hrEnv));
-                            MessageBoxW(nullptr,
-                                L"Microsoft Edge WebView2 Runtime could not be initialised.\n"
-                                L"Please install the Evergreen runtime and restart Nexile.",
-                                L"Nexile – WebView2 error", MB_ICONERROR);
-                            return S_OK;
-                        }
-                        LOG_INFO("WebView2 environment created successfully");
-                        m_webViewEnvironment = env;
+        LOG_INFO("Using bundled WebView2 runtime at {}", Utils::WideStringToString(runtimeDir));
 
-                        // -------- Create controller ------------------------------------
-                        env->CreateCoreWebView2Controller(
-                            m_hwnd,
-                            Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
-                                [this](HRESULT hrCtl, ICoreWebView2Controller* ctl) -> HRESULT {
-                                    if (FAILED(hrCtl) || !ctl) {
-                                        LOG_ERROR("Failed to create WebView2 controller, HRESULT: {}", HResultToHex(hrCtl));
-                                        return S_OK;
-                                    }
-                                    m_webViewController = ctl;
-                                    m_webViewController->get_CoreWebView2(&m_webView);
-
-                                    // black background before first navigate
-                                    Microsoft::WRL::ComPtr<ICoreWebView2Controller2> ctl2;
-                                    if (SUCCEEDED(ctl->QueryInterface(IID_PPV_ARGS(&ctl2)))) {
-                                        COREWEBVIEW2_COLOR black{ 0xFF,0x00,0x00,0x00 };
-                                        ctl2->put_DefaultBackgroundColor(black);
-                                    }
-
-                                    RECT rc{}; GetClientRect(m_hwnd, &rc);
-                                    m_webViewController->put_Bounds(rc);
-
-                                    SetupWebViewEventHandlers();
-                                    NavigateWelcomePage();
-                                    return S_OK;
-                                }).Get());
+        // --- lambda that creates the environment with bundled runtime -----------------------
+        HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
+            runtimeDir.c_str(), userDataFolder.c_str(), nullptr,
+            Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
+                [this](HRESULT hrEnv, ICoreWebView2Environment* env) -> HRESULT {
+                    if (FAILED(hrEnv) || !env) {
+                        LOG_ERROR("Failed to create WebView2 environment, HRESULT: {}", HResultToHex(hrEnv));
+                        MessageBoxW(nullptr,
+                            L"Microsoft Edge WebView2 Runtime could not be initialised.\n"
+                            L"Please ensure the application was installed correctly.",
+                            L"Nexile – WebView2 error", MB_ICONERROR);
                         return S_OK;
-                    }).Get());
-            };
+                    }
+                    LOG_INFO("WebView2 environment created successfully");
+                    m_webViewEnvironment = env;
 
-        // attempt with runtime decision
-        HRESULT hr = createEnvironment(browserFolder, userDataFolder.c_str());
-        if (FAILED(hr) && browserFolder != nullptr) {
-            // one more try: maybe the bundled runtime also fails – try system default
-            LOG_WARNING("Retrying WebView2 environment creation with system runtime (HRESULT {} )", HResultToHex(hr));
-            createEnvironment(nullptr, userDataFolder.c_str());
+                    // -------- Create controller ------------------------------------
+                    env->CreateCoreWebView2Controller(
+                        m_hwnd,
+                        Microsoft::WRL::Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+                            [this](HRESULT hrCtl, ICoreWebView2Controller* ctl) -> HRESULT {
+                                if (FAILED(hrCtl) || !ctl) {
+                                    LOG_ERROR("Failed to create WebView2 controller, HRESULT: {}", HResultToHex(hrCtl));
+                                    return S_OK;
+                                }
+                                m_webViewController = ctl;
+                                m_webViewController->get_CoreWebView2(&m_webView);
+
+                                // black background before first navigate
+                                Microsoft::WRL::ComPtr<ICoreWebView2Controller2> ctl2;
+                                if (SUCCEEDED(ctl->QueryInterface(IID_PPV_ARGS(&ctl2)))) {
+                                    COREWEBVIEW2_COLOR black{ 0xFF,0x00,0x00,0x00 };
+                                    ctl2->put_DefaultBackgroundColor(black);
+                                }
+
+                                RECT rc{}; GetClientRect(m_hwnd, &rc);
+                                m_webViewController->put_Bounds(rc);
+
+                                SetupWebViewEventHandlers();
+                                NavigateWelcomePage();
+                                return S_OK;
+                            }).Get());
+                    return S_OK;
+                }).Get());
+
+        if (FAILED(hr)) {
+            LOG_ERROR("Failed to create WebView2 environment with bundled runtime (HRESULT {})", HResultToHex(hr));
+            MessageBoxW(nullptr,
+                L"Failed to initialize bundled WebView2 runtime.\n"
+                L"Please ensure no files are missing from installation.",
+                L"Nexile – WebView2 error", MB_ICONERROR);
         }
     }
 
@@ -180,15 +191,170 @@ namespace Nexile {
     // =============================================================
     void OverlayWindow::NavigateWelcomePage() {
         if (!m_webView) return;
-        std::string htmlPath = Utils::CombinePath(Utils::GetModulePath(), "UI/HTML/welcome.html");
-        if (!Utils::FileExists(htmlPath)) {
-            LOG_WARNING("welcome.html not found, falling back to inline welcome page");
-            m_webView->NavigateToString(L"<html><body style='background:#000;color:#fff;display:flex;align-items:center;justify-content:center;font-family:Segoe UI'><h1>Welcome to Nexile Overlay</h1></body></html>");
-            return;
+
+        // Create a styled welcome page directly
+        const wchar_t* welcomeHTML = LR"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexile Overlay</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
         }
-        std::wstring url = L"file:///" + Utils::StringToWideString(htmlPath);
-        std::replace(url.begin(), url.end(), L'\\', L'/');
-        m_webView->Navigate(url.c_str());
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .logo {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #4a90e2;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .hotkeys {
+            background-color: rgba(40, 40, 40, 0.7);
+            border-radius: 8px;
+            padding: 15px 25px;
+            margin: 10px 0;
+            width: 80%;
+            max-width: 600px;
+        }
+
+        .hotkeys h2 {
+            color: #4a90e2;
+            margin-top: 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
+        }
+
+        .hotkey-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 5px 0;
+        }
+
+        .hotkey-combo {
+            background-color: rgba(30, 30, 30, 0.8);
+            padding: 5px 10px;
+            border-radius: 4px;
+            min-width: 80px;
+            text-align: center;
+            margin-left: 20px;
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+        }
+
+        .controls {
+            margin-top: 20px;
+        }
+
+        .button {
+            display: inline-block;
+            background-color: #4a90e2;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin: 0 10px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .button:hover {
+            background-color: #3a80d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">NEXILE</div>
+        <div class="subtitle">Game Overlay Assistant</div>
+
+        <div class="hotkeys">
+            <h2>Default Hotkeys</h2>
+            <div class="hotkey-item">
+                <span>Toggle Overlay</span>
+                <span class="hotkey-combo">Ctrl+F1</span>
+            </div>
+            <div class="hotkey-item">
+                <span>Price Check (PoE)</span>
+                <span class="hotkey-combo">Alt+D</span>
+            </div>
+            <div class="hotkey-item">
+                <span>Open Settings</span>
+                <span class="hotkey-combo">Ctrl+F2</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <a href="#" class="button" id="settings-button">Settings</a>
+            <a href="#" class="button" id="close-button">Close Overlay</a>
+        </div>
+
+        <div class="footer">Nexile v0.1.0 | Press Ctrl+F1 to toggle overlay</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Setup button event handlers
+            document.getElementById('settings-button').addEventListener('click', function() {
+                // Send message to C++ host to open settings
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'open_settings'
+                }));
+            });
+
+            document.getElementById('close-button').addEventListener('click', function() {
+                // Send message to C++ host to close/hide overlay
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'toggle_overlay'
+                }));
+            });
+
+            // Listen for messages from the C++ host
+            window.chrome.webview.addEventListener('message', function(event) {
+                const message = JSON.parse(event.data);
+                // Handle messages from C++ host if needed
+            });
+        });
+    </script>
+</body>
+</html>
+)";
+
+        // Directly set HTML content
+        m_webView->NavigateToString(welcomeHTML);
+        LOG_INFO("Loading built-in welcome page");
     }
 
     // =============================================================

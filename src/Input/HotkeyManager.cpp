@@ -1,5 +1,6 @@
 #include "HotkeyManager.h"
 #include "../Core/NexileApp.h"
+#include "../Utils/Logger.h"
 #include <iostream>
 #include <sstream>
 
@@ -20,6 +21,9 @@ namespace Nexile {
     void HotkeyManager::InitializeDefaultHotkeys() {
         // Default hotkey for toggling overlay (Ctrl+F1)
         RegisterHotkey(MOD_CONTROL, VK_F1, HOTKEY_TOGGLE_OVERLAY);
+
+        // Default hotkey for settings (Ctrl+F2)
+        RegisterHotkey(MOD_CONTROL, VK_F2, HOTKEY_GAME_SETTINGS);
 
         // Default hotkey for price check (Alt+D) - registered by the module
 
@@ -53,6 +57,7 @@ namespace Nexile {
         auto it = m_hotkeyIdentifiers.find(identifier);
         if (it != m_hotkeyIdentifiers.end() && it->second != hotkeyId) {
             // Same key combination used for a different hotkey
+            LOG_WARNING("Hotkey combination already in use: {}", identifier);
             return false;
         }
 
@@ -60,14 +65,31 @@ namespace Nexile {
         HWND hwnd = m_app->GetMainWindowHandle();
         if (!RegisterHotKey(hwnd, hotkeyId, modifiers, virtualKey)) {
             DWORD error = GetLastError();
-            std::cerr << "Failed to register hotkey: " << error << std::endl;
-            return false;
+            LOG_ERROR("Failed to register hotkey: {}", error);
+
+            // Error 1409 means hotkey is already registered
+            if (error == ERROR_HOTKEY_ALREADY_REGISTERED) {
+                LOG_WARNING("Hotkey already registered by another application");
+
+                // Try with a fallback method - unregister first then register again
+                UnregisterHotKey(hwnd, hotkeyId);
+                if (!RegisterHotKey(hwnd, hotkeyId, modifiers, virtualKey)) {
+                    error = GetLastError();
+                    LOG_ERROR("Failed to register hotkey after unregister attempt: {}", error);
+                    return false;
+                }
+                LOG_INFO("Successfully registered hotkey after unregister attempt: {}", GetHotkeyString(hotkeyId));
+            }
+            else {
+                return false;
+            }
         }
 
         // Store in our maps
         m_hotkeys[hotkeyId] = config;
         m_hotkeyIdentifiers[identifier] = hotkeyId;
 
+        LOG_INFO("Successfully registered hotkey: {} ({})", hotkeyId, GetHotkeyString(hotkeyId));
         return true;
     }
 
@@ -85,6 +107,8 @@ namespace Nexile {
         // Unregister with Windows
         HWND hwnd = m_app->GetMainWindowHandle();
         if (!UnregisterHotKey(hwnd, hotkeyId)) {
+            DWORD error = GetLastError();
+            LOG_ERROR("Failed to unregister hotkey: {}", error);
             return false;
         }
 
@@ -95,6 +119,7 @@ namespace Nexile {
         // Remove from hotkey map
         m_hotkeys.erase(it);
 
+        LOG_INFO("Unregistered hotkey: {}", hotkeyId);
         return true;
     }
 

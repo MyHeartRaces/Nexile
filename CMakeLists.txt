@@ -66,7 +66,7 @@ file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
 
 set(RESOURCE_FILES
     "src/Resources.rc"
-    "src/Utils/Logger.h")
+    "src/Utils/Logger.h" "src/Modules/SettingsModule.h")
 
 set(HTML_RESOURCES
     "src/UI/HTML/main_overlay.html"
@@ -75,7 +75,7 @@ set(HTML_RESOURCES
 # -----------------------------------------------------------------------------
 # Target
 # -----------------------------------------------------------------------------
-add_executable(Nexile WIN32 ${SOURCES} ${RESOURCE_FILES})
+add_executable(Nexile WIN32 ${SOURCES} ${RESOURCE_FILES} "src/Modules/SettingsModule.h")
 
 # Link libraries
 # -----------------------------------------------------------------------------

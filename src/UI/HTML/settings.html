@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexile Settings</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: auto;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 15px;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4a90e2;
+        }
+
+        .tab-bar {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+            .tab.active {
+                border-bottom: 2px solid #4a90e2;
+                color: #4a90e2;
+            }
+
+            .tab:hover {
+                background-color: rgba(74, 144, 226, 0.1);
+            }
+
+        .tab-content {
+            display: none;
+        }
+
+            .tab-content.active {
+                display: block;
+            }
+
+        .section {
+            background-color: rgba(40, 40, 40, 0.7);
+            border-radius: 8px;
+            padding: 15px 25px;
+            margin: 15px 0;
+        }
+
+        .section-title {
+            color: #4a90e2;
+            margin-top: 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .form-label {
+            flex: 1;
+        }
+
+        .hotkey-input {
+            background-color: rgba(30, 30, 30, 0.8);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 12px;
+            border-radius: 4px;
+            min-width: 150px;
+            text-align: center;
+            cursor: pointer;
+        }
+
+            .hotkey-input.recording {
+                background-color: rgba(220, 53, 69, 0.3);
+                border-color: rgba(220, 53, 69, 0.5);
+            }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 45px;
+            height: 24px;
+        }
+
+            .switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(30, 30, 30, 0.8);
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 16px;
+                width: 16px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+
+        input:checked + .slider {
+            background-color: #4a90e2;
+        }
+
+            input:checked + .slider:before {
+                transform: translateX(21px);
+            }
+
+        .buttons {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .button {
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+            margin-left: 10px;
+            font-size: 14px;
+        }
+
+        .primary-button {
+            background-color: #4a90e2;
+            color: white;
+        }
+
+        .secondary-button {
+            background-color: rgba(60, 60, 60, 0.8);
+            color: white;
+        }
+
+        select {
+            background-color: rgba(30, 30, 30, 0.8);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 12px;
+            border-radius: 4px;
+            min-width: 150px;
+        }
+
+        input[type="range"] {
+            width: 150px;
+        }
+
+        .value-display {
+            min-width: 40px;
+            text-align: center;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">Nexile Settings</div>
+        </div>
+
+        <div class="tab-bar">
+            <div class="tab active" data-tab="general">General</div>
+            <div class="tab" data-tab="hotkeys">Hotkeys</div>
+            <div class="tab" data-tab="modules">Modules</div>
+            <div class="tab" data-tab="about">About</div>
+        </div>
+
+        <div class="tab-content active" id="general-tab">
+            <div class="section">
+                <h2 class="section-title">Overlay Settings</h2>
+                <div class="form-row">
+                    <div class="form-label">Overlay Opacity</div>
+                    <div style="display: flex; align-items: center;">
+                        <input type="range" id="opacity-slider" min="10" max="100" value="80">
+                        <div class="value-display" id="opacity-value">80%</div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">Click-through Overlay (when not focused)</div>
+                    <label class="switch">
+                        <input type="checkbox" id="click-through-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">Start with Windows</div>
+                    <label class="switch">
+                        <input type="checkbox" id="autostart-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Game Detection</h2>
+                <div class="form-row">
+                    <div class="form-label">Auto-detect Games</div>
+                    <label class="switch">
+                        <input type="checkbox" id="autodetect-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">Current Game</div>
+                    <select id="game-select">
+                        <option value="none">None</option>
+                        <option value="pathofexile">Path of Exile</option>
+                        <option value="pathofexile2">Path of Exile 2</option>
+                        <option value="lastepoch">Last Epoch</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="hotkeys-tab">
+            <div class="section">
+                <h2 class="section-title">Global Hotkeys</h2>
+                <div class="form-row">
+                    <div class="form-label">Toggle Overlay</div>
+                    <div class="hotkey-input" data-hotkey-id="1000">Ctrl+F1</div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">Open Settings</div>
+                    <div class="hotkey-input" data-hotkey-id="1004">Ctrl+F2</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Path of Exile Hotkeys</h2>
+                <div class="form-row">
+                    <div class="form-label">Price Check</div>
+                    <div class="hotkey-input" data-hotkey-id="1001">Alt+D</div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">Map Overlay</div>
+                    <div class="hotkey-input" data-hotkey-id="1003">Alt+M</div>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">Build Guide</div>
+                    <div class="hotkey-input" data-hotkey-id="1002">Alt+B</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="modules-tab">
+            <div class="section">
+                <h2 class="section-title">Enable/Disable Modules</h2>
+                <div class="form-row">
+                    <div class="form-label">Price Check</div>
+                    <label class="switch">
+                        <input type="checkbox" id="price-check-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">Build Guide</div>
+                    <label class="switch">
+                        <input type="checkbox" id="build-guide-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-label">Map Overlay</div>
+                    <label class="switch">
+                        <input type="checkbox" id="map-overlay-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="about-tab">
+            <div class="section">
+                <h2 class="section-title">About Nexile</h2>
+                <p>Nexile v0.1.0</p>
+                <p>A modular desktop overlay assistant designed for action RPGs like Path of Exile, Path of Exile 2, and Last Epoch.</p>
+                <p>© 2025 Nexile Team</p>
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button class="button secondary-button" id="cancel-button">Cancel</button>
+            <button class="button secondary-button" id="reset-button">Reset to Default</button>
+            <button class="button primary-button" id="save-button">Save Changes</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Tab switching
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const tabId = this.getAttribute('data-tab');
+
+                    // Deactivate all tabs and contents
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tabContents.forEach(c => c.classList.remove('active'));
+
+                    // Activate selected tab and content
+                    this.classList.add('active');
+                    document.getElementById(tabId + '-tab').classList.add('active');
+                });
+            });
+
+            // Opacity slider
+            const opacitySlider = document.getElementById('opacity-slider');
+            const opacityValue = document.getElementById('opacity-value');
+
+            opacitySlider.addEventListener('input', function() {
+                opacityValue.textContent = this.value + '%';
+            });
+
+            // Hotkey recording
+            const hotkeyInputs = document.querySelectorAll('.hotkey-input');
+
+            hotkeyInputs.forEach(input => {
+                input.addEventListener('click', function() {
+                    // Already recording on this input
+                    if (this.classList.contains('recording')) {
+                        stopRecording(this);
+                        return;
+                    }
+
+                    // Stop recording on any other inputs
+                    hotkeyInputs.forEach(h => {
+                        if (h.classList.contains('recording')) {
+                            stopRecording(h);
+                        }
+                    });
+
+                    // Start recording on this input
+                    this.classList.add('recording');
+                    this.textContent = 'Press key combination...';
+
+                    // Send message to C++ host that we're recording
+                    const hotkeyId = this.getAttribute('data-hotkey-id');
+                    window.chrome.webview.postMessage(JSON.stringify({
+                        action: 'hotkey_recording_start',
+                        hotkeyId: hotkeyId
+                    }));
+                });
+            });
+
+            function stopRecording(element) {
+                element.classList.remove('recording');
+                const hotkeyId = element.getAttribute('data-hotkey-id');
+
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'hotkey_recording_stop',
+                    hotkeyId: hotkeyId
+                }));
+            }
+
+            // Handle key presses during recording
+            document.addEventListener('keydown', function(e) {
+                const recordingInput = document.querySelector('.hotkey-input.recording');
+                if (!recordingInput) return;
+
+                e.preventDefault();
+
+                // Get modifiers
+                const ctrl = e.ctrlKey;
+                const alt = e.altKey;
+                const shift = e.shiftKey;
+
+                // Get main key
+                let key = e.key;
+
+                // Special case for function keys and common keys
+                if (e.key.startsWith('F') && !isNaN(e.key.substring(1))) {
+                    key = e.key;
+                } else if (e.key === 'Control' || e.key === 'Alt' || e.key === 'Shift') {
+                    // Just modifiers, wait for a non-modifier key
+                    return;
+                } else {
+                    key = e.key.toUpperCase();
+                }
+
+                // Construct hotkey string
+                let hotkeyString = '';
+                if (ctrl) hotkeyString += 'Ctrl+';
+                if (alt) hotkeyString += 'Alt+';
+                if (shift) hotkeyString += 'Shift+';
+                hotkeyString += key;
+
+                // Update the input text
+                recordingInput.textContent = hotkeyString;
+
+                // Get hotkey ID
+                const hotkeyId = recordingInput.getAttribute('data-hotkey-id');
+
+                // Send to C++ host
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'hotkey_update',
+                    hotkeyId: hotkeyId,
+                    ctrl: ctrl,
+                    alt: alt,
+                    shift: shift,
+                    key: e.keyCode
+                }));
+
+                // Stop recording
+                stopRecording(recordingInput);
+            });
+
+            // Buttons
+            document.getElementById('save-button').addEventListener('click', function() {
+                // Collect settings
+                const settings = {
+                    general: {
+                        opacity: opacitySlider.value,
+                        clickThrough: document.getElementById('click-through-toggle').checked,
+                        autostart: document.getElementById('autostart-toggle').checked,
+                        autodetect: document.getElementById('autodetect-toggle').checked,
+                        currentGame: document.getElementById('game-select').value
+                    },
+                    modules: {
+                        priceCheck: document.getElementById('price-check-toggle').checked,
+                        buildGuide: document.getElementById('build-guide-toggle').checked,
+                        mapOverlay: document.getElementById('map-overlay-toggle').checked
+                    }
+                };
+
+                // Send to C++ host
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'save_settings',
+                    settings: settings
+                }));
+            });
+
+            document.getElementById('cancel-button').addEventListener('click', function() {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'cancel_settings'
+                }));
+            });
+
+            document.getElementById('reset-button').addEventListener('click', function() {
+                if (confirm('Reset all settings to default?')) {
+                    window.chrome.webview.postMessage(JSON.stringify({
+                        action: 'reset_settings'
+                    }));
+                }
+            });
+
+            // Listen for messages from the C++ host
+            window.chrome.webview.addEventListener('message', function(event) {
+                const message = JSON.parse(event.data);
+
+                if (message.action === 'load_settings') {
+                    // Populate settings UI with values from C++
+                    const settings = message.settings;
+
+                    // General settings
+                    if (settings.general) {
+                        opacitySlider.value = settings.general.opacity;
+                        opacityValue.textContent = settings.general.opacity + '%';
+                        document.getElementById('click-through-toggle').checked = settings.general.clickThrough;
+                        document.getElementById('autostart-toggle').checked = settings.general.autostart;
+                        document.getElementById('autodetect-toggle').checked = settings.general.autodetect;
+                        document.getElementById('game-select').value = settings.general.currentGame;
+                    }
+
+                    // Module settings
+                    if (settings.modules) {
+                        document.getElementById('price-check-toggle').checked = settings.modules.priceCheck;
+                        document.getElementById('build-guide-toggle').checked = settings.modules.buildGuide;
+                        document.getElementById('map-overlay-toggle').checked = settings.modules.mapOverlay;
+                    }
+
+                    // Hotkey settings
+                    if (settings.hotkeys) {
+                        Object.keys(settings.hotkeys).forEach(id => {
+                            const input = document.querySelector(`.hotkey-input[data-hotkey-id="${id}"]`);
+                            if (input) {
+                                input.textContent = settings.hotkeys[id];
+                            }
+                        });
+                    }
+                }
+            });
+
+            // Request settings when page loads
+            window.chrome.webview.postMessage(JSON.stringify({
+                action: 'get_settings'
+            }));
+        });
+    </script>
+</body>
+</html>

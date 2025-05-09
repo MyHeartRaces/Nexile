@@ -5,6 +5,7 @@
 #include <chrono>
 
 #include "../Modules/PriceCheckModule.h"
+#include "../Modules/SettingsModule.h"
 #include "../UI/Resources.h"
 #include "../Utils/Utils.h"
 #include "../Utils/Logger.h"
@@ -291,8 +292,14 @@ namespace Nexile {
     }
 
     void NexileApp::ShowSettingsDialog() {
-        // TODO: Implement settings dialog
-        LOG_INFO("Settings dialog requested (not yet implemented)");
+        // Show settings module UI
+        auto settingsModule = GetModule("settings");
+        if (settingsModule) {
+            settingsModule->OnHotkeyPressed(HotkeyManager::HOTKEY_GAME_SETTINGS);
+        }
+        else {
+            LOG_ERROR("Settings module not found");
+        }
     }
 
     void NexileApp::OnHotkeyPressed(int hotkeyId) {
@@ -349,6 +356,15 @@ namespace Nexile {
             // Create and register built-in modules
             auto priceCheckModule = std::make_shared<PriceCheckModule>();
             m_modules["price_check"] = priceCheckModule;
+
+            // Create settings module
+            auto settingsModule = std::make_shared<SettingsModule>();
+            m_modules["settings"] = settingsModule;
+
+            // Register hotkey for settings
+            if (m_hotkeyManager) {
+                m_hotkeyManager->RegisterHotkey(MOD_CONTROL, VK_F2, HotkeyManager::HOTKEY_GAME_SETTINGS);
+            }
 
             // Scan modules directory for plugin DLLs
             std::string modulesPath = Utils::CombinePath(Utils::GetModulePath(), "modules");
