@@ -197,6 +197,7 @@ namespace Nexile {
         script << L"}, '*');";
 
         overlay->ExecuteScript(script.str());
+    }
 
     void SettingsModule::ProcessSettingsMessage(const std::string& message) {
         try {
@@ -258,20 +259,17 @@ namespace Nexile {
                 // Save settings
                 SaveSettings();
 
-                // Close settings UI and return to overlay
+                // Update UI with a "saved" message
                 OverlayWindow* overlay = profileManager->GetOverlayWindow();
                 if (overlay) {
-                    overlay->LoadMainOverlayUI();
+                    overlay->ExecuteScript(L"window.postMessage({action: 'settings_saved'}, '*');");
                 }
             }
             else if (action == "cancel_settings") {
                 // Close settings UI without saving
                 NexileApp* app = NexileApp::GetInstance();
                 if (app) {
-                    OverlayWindow* overlay = app->GetProfileManager()->GetOverlayWindow();
-                    if (overlay) {
-                        overlay->LoadMainOverlayUI();
-                    }
+                    app->ToggleOverlay();
                 }
             }
             else if (action == "reset_settings") {

@@ -70,7 +70,8 @@ set(RESOURCE_FILES
 
 set(HTML_RESOURCES
     "src/UI/HTML/main_overlay.html"
-    "src/UI/HTML/price_check_module.html")
+    "src/UI/HTML/price_check_module.html"
+    "src/UI/HTML/settings.html")
 
 # -----------------------------------------------------------------------------
 # Target
