@@ -170,7 +170,11 @@ namespace Nexile {
                                 RECT rc{}; GetClientRect(m_hwnd, &rc);
                                 m_webViewController->put_Bounds(rc);
 
+                                // Set up event handlers before navigation
                                 SetupWebViewEventHandlers();
+
+                                // Enable the WebView2 visual - this is critical to make it display content
+                                m_webViewController->put_IsVisible(TRUE);
 
                                 // Show welcome page on startup
                                 LoadWelcomePage();
@@ -662,6 +666,7 @@ namespace Nexile {
             return;
         }
 
+        // Add web message received handler
         m_webView->add_WebMessageReceived(
             Microsoft::WRL::Callback<ICoreWebView2WebMessageReceivedEventHandler>(
                 [this](ICoreWebView2* /*sender*/, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
@@ -675,6 +680,24 @@ namespace Nexile {
                     return S_OK;
                 }).Get(),
                     &m_webMessageReceivedToken);
+
+        // Add navigation completed handler
+        m_webView->add_NavigationCompleted(
+            Microsoft::WRL::Callback<ICoreWebView2NavigationCompletedEventHandler>(
+                [this](ICoreWebView2* /*sender*/, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
+                    BOOL success;
+                    args->get_IsSuccess(&success);
+                    if (success) {
+                        LOG_INFO("Navigation completed successfully");
+                    }
+                    else {
+                        COREWEBVIEW2_WEB_ERROR_STATUS status;
+                        args->get_WebErrorStatus(&status);
+                        LOG_ERROR("Navigation failed with error: {}", status);
+                    }
+                    return S_OK;
+                }).Get(),
+                    &m_navigationCompletedToken);
 
         m_webView->AddScriptToExecuteOnDocumentCreated(
             L"window.chrome.webview.addEventListener('message', e=>window.postMessage(e.data,'*'));", nullptr);

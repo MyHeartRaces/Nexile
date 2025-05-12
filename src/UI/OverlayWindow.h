@@ -62,6 +62,7 @@ namespace Nexile {
         wil::com_ptr<ICoreWebView2>            m_webView;
 
         EventRegistrationToken m_webMessageReceivedToken{};
+        EventRegistrationToken m_navigationCompletedToken{};
 
         std::mutex                       m_callbackMutex;
         std::vector<WebMessageCallback>  m_webMessageCallbacks;
