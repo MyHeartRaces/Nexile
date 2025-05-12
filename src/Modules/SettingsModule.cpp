@@ -50,8 +50,11 @@ namespace Nexile {
         std::string htmlContent = Utils::ReadTextFile(htmlPath);
 
         if (!htmlContent.empty()) {
+            LOG_INFO("Loaded settings HTML from file: {}", htmlPath);
             return htmlContent;
         }
+
+        LOG_WARNING("Settings HTML file not found at {}. Using default settings HTML.", htmlPath);
 
         // Return a basic settings page if we couldn't load the file
         return R"(
@@ -61,18 +64,168 @@ namespace Nexile {
                 <title>Nexile Settings</title>
                 <style>
                     body { 
-                        background-color: rgba(0, 0, 0, 0.75);
+                        background-color: rgba(30, 30, 30, 0.85);
                         color: white;
                         font-family: 'Segoe UI', sans-serif;
                         padding: 20px;
                     }
                     h1 { color: #4a90e2; }
+                    
+                    .settings-container {
+                        margin: 20px 0;
+                    }
+                    
+                    .setting-item {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 10px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                    }
+                    
+                    .setting-label {
+                        font-weight: bold;
+                    }
+                    
+                    .button-container {
+                        margin-top: 20px;
+                        text-align: right;
+                    }
+                    
+                    .button {
+                        background-color: #4a90e2;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        margin-left: 10px;
+                    }
+                    
+                    .button:hover {
+                        background-color: #3a80d2;
+                    }
                 </style>
             </head>
             <body>
                 <h1>Nexile Settings</h1>
-                <p>Settings page could not be loaded.</p>
-                <p>Please ensure the application was installed correctly.</p>
+                
+                <div class="settings-container">
+                    <h2>General Settings</h2>
+                    <div class="setting-item">
+                        <span class="setting-label">Overlay Opacity</span>
+                        <input type="range" id="opacity-slider" min="10" max="100" value="80">
+                        <span id="opacity-value">80%</span>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <span class="setting-label">Click-Through</span>
+                        <input type="checkbox" id="click-through" checked>
+                    </div>
+                    
+                    <h2>Modules</h2>
+                    <div class="setting-item">
+                        <span class="setting-label">Price Check</span>
+                        <input type="checkbox" id="module-pricecheck" checked>
+                    </div>
+                    
+                    <h2>Hotkeys</h2>
+                    <div class="setting-item">
+                        <span class="setting-label">Toggle Overlay</span>
+                        <span>Ctrl+F1</span>
+                    </div>
+                    <div class="setting-item">
+                        <span class="setting-label">Price Check</span>
+                        <span>Alt+D</span>
+                    </div>
+                    <div class="setting-item">
+                        <span class="setting-label">Settings</span>
+                        <span>Ctrl+F2</span>
+                    </div>
+                </div>
+                
+                <div class="button-container">
+                    <button id="btn-cancel" class="button">Cancel</button>
+                    <button id="btn-save" class="button">Save</button>
+                </div>
+                
+                <script>
+                    // Initialize settings
+                    document.addEventListener('DOMContentLoaded', function() {
+                        // Request current settings
+                        window.chrome.webview.postMessage(JSON.stringify({
+                            action: "get_settings"
+                        }));
+                        
+                        // Handle opacity slider
+                        const opacitySlider = document.getElementById('opacity-slider');
+                        const opacityValue = document.getElementById('opacity-value');
+                        
+                        opacitySlider.addEventListener('input', function() {
+                            opacityValue.textContent = this.value + '%';
+                        });
+                        
+                        // Handle save button
+                        document.getElementById('btn-save').addEventListener('click', function() {
+                            const settings = {
+                                general: {
+                                    opacity: parseInt(opacitySlider.value),
+                                    clickThrough: document.getElementById('click-through').checked
+                                },
+                                modules: {
+                                    priceCheck: document.getElementById('module-pricecheck').checked
+                                }
+                            };
+                            
+                            window.chrome.webview.postMessage(JSON.stringify({
+                                action: "save_settings",
+                                settings: settings
+                            }));
+                        });
+                        
+                        // Handle cancel button
+                        document.getElementById('btn-cancel').addEventListener('click', function() {
+                            window.chrome.webview.postMessage(JSON.stringify({
+                                action: "cancel_settings"
+                            }));
+                        });
+                        
+                        // Listen for messages from C++
+                        window.chrome.webview.addEventListener('message', function(event) {
+                            try {
+                                const message = JSON.parse(event.data);
+                                console.log("Received settings message:", message);
+                                
+                                if (message.action === 'load_settings' && message.settings) {
+                                    const settings = message.settings;
+                                    
+                                    // Update general settings
+                                    if (settings.general) {
+                                        if (settings.general.opacity) {
+                                            opacitySlider.value = settings.general.opacity;
+                                            opacityValue.textContent = settings.general.opacity + '%';
+                                        }
+                                        
+                                        if (settings.general.hasOwnProperty('clickThrough')) {
+                                            document.getElementById('click-through').checked = 
+                                                settings.general.clickThrough;
+                                        }
+                                    }
+                                    
+                                    // Update module settings
+                                    if (settings.modules) {
+                                        if (settings.modules.hasOwnProperty('price_check')) {
+                                            document.getElementById('module-pricecheck').checked = 
+                                                settings.modules.price_check;
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("Error processing settings message:", e);
+                            }
+                        });
+                    });
+                </script>
             </body>
             </html>
         )";
@@ -112,20 +265,8 @@ namespace Nexile {
     }
 
     void SettingsModule::OnHotkeyPressed(int hotkeyId) {
-        if (hotkeyId == HotkeyManager::HOTKEY_GAME_SETTINGS) {
-            LOG_INFO("Settings hotkey pressed");
-
-            // Show settings UI
-            NexileApp* app = NexileApp::GetInstance();
-            if (app) {
-                OverlayWindow* overlay = app->GetProfileManager()->GetOverlayWindow();
-                if (overlay) {
-                    overlay->SetClickThrough(false); // Make overlay interactive
-                    overlay->LoadModuleUI(app->GetModule("settings"));
-                    app->SetOverlayVisible(true);
-                }
-            }
-        }
+        // The NexileApp now handles the settings hotkey directly, so this method doesn't need to do anything
+        // The code here is deliberately left empty to avoid conflicting with NexileApp's settings handling
     }
 
     void SettingsModule::SaveSettings() {
@@ -259,17 +400,21 @@ namespace Nexile {
                 // Save settings
                 SaveSettings();
 
-                // Update UI with a "saved" message
+                // Close settings UI and return to overlay
                 OverlayWindow* overlay = profileManager->GetOverlayWindow();
                 if (overlay) {
-                    overlay->ExecuteScript(L"window.postMessage({action: 'settings_saved'}, '*');");
+                    overlay->LoadMainOverlayUI();
                 }
+
+                // Exit settings mode in NexileApp
+                app->OnHotkeyPressed(HotkeyManager::HOTKEY_GAME_SETTINGS);
             }
             else if (action == "cancel_settings") {
                 // Close settings UI without saving
                 NexileApp* app = NexileApp::GetInstance();
                 if (app) {
-                    app->ToggleOverlay();
+                    // Exit settings mode in NexileApp
+                    app->OnHotkeyPressed(HotkeyManager::HOTKEY_GAME_SETTINGS);
                 }
             }
             else if (action == "reset_settings") {

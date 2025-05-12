@@ -33,13 +33,10 @@ namespace Nexile {
 
         void RegisterWebMessageCallback(WebMessageCallback cb);
         void LoadModuleUI(const std::shared_ptr<IModule>& module);
-        std::wstring CreateModuleLoaderHTML();
-
-        // Made public to be accessible from SettingsModule
         void LoadMainOverlayUI();
-
-        // Returns true if the WebView is initialized and ready
-        bool IsWebViewReady() const { return m_webView != nullptr; }
+        void LoadWelcomePage();
+        void LoadBrowserPage();
+        std::wstring CreateModuleLoaderHTML();
 
     private:
         // ------------- core window plumbing -------------
@@ -49,9 +46,6 @@ namespace Nexile {
         void RegisterWindowClass();
         void InitializeWindow();
         void InitializeWebView();
-
-        // ------------- navigation helpers ---------------
-        void NavigateWelcomePage();
 
         // ------------- WebView wiring -------------------
         void SetupWebViewEventHandlers();

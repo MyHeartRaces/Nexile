@@ -19,13 +19,17 @@ namespace Nexile {
     }
 
     void HotkeyManager::InitializeDefaultHotkeys() {
-        // Default hotkey for toggling overlay (Ctrl+F1)
-        RegisterHotkey(MOD_CONTROL, VK_F1, HOTKEY_TOGGLE_OVERLAY);
+        // Default hotkey for toggling overlay (Alt+Shift+O) - Changed from Ctrl+F1
+        RegisterHotkey(MOD_ALT | MOD_SHIFT, (int)'O', HOTKEY_TOGGLE_OVERLAY);
 
-        // Default hotkey for settings (Ctrl+F2)
-        RegisterHotkey(MOD_CONTROL, VK_F2, HOTKEY_GAME_SETTINGS);
+        // Default hotkey for settings (Alt+Shift+S) - Changed from Ctrl+F2
+        RegisterHotkey(MOD_ALT | MOD_SHIFT, (int)'S', HOTKEY_GAME_SETTINGS);
 
-        // Default hotkey for price check (Alt+D) - registered by the module
+        // Default hotkey for price check (Alt+P) - Changed from Alt+D
+        RegisterHotkey(MOD_ALT, (int)'P', HOTKEY_PRICE_CHECK);
+
+        // New hotkey for browser (Alt+Shift+B)
+        RegisterHotkey(MOD_ALT | MOD_SHIFT, (int)'B', HOTKEY_BROWSER);
 
         // Add more default hotkeys as needed
     }

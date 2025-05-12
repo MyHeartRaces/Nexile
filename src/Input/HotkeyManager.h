@@ -38,6 +38,7 @@ namespace Nexile {
         static const int HOTKEY_BUILD_GUIDE = 1002;
         static const int HOTKEY_MAP_OVERLAY = 1003;
         static const int HOTKEY_GAME_SETTINGS = 1004;
+        static const int HOTKEY_BROWSER = 1005;
 
         HotkeyManager(NexileApp* app);
         ~HotkeyManager();

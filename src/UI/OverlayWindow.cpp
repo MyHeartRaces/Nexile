@@ -85,19 +85,18 @@ namespace Nexile {
     void OverlayWindow::InitializeWindow() {
         RegisterWindowClass();
 
-        // Create standard window instead of layered window for better WebView compatibility
         m_hwnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,  // Removed WS_EX_LAYERED and WS_EX_TRANSPARENT
-            L"NexileOverlayClass", L"Nexile Overlay", WS_OVERLAPPEDWINDOW,  // Use standard window style
-            100, 100, 800, 600,  // Position away from corner for better visibility during testing
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            L"NexileOverlayClass", L"Nexile Overlay", WS_POPUP,
+            0, 0, 1920, 1080,
             nullptr, nullptr, m_app->GetInstanceHandle(), nullptr);
 
         if (!m_hwnd) throw std::runtime_error("Failed to create overlay window");
 
         SetWindowLongPtr(m_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
-        // Set window background to dark color
-        SetClassLongPtr(m_hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)CreateSolidBrush(RGB(30, 30, 30)));
+        // Use a black background with proper transparency (alpha: 200)
+        SetLayeredWindowAttributes(m_hwnd, 0, 200, LWA_ALPHA);
     }
 
     // =============================================================
@@ -161,49 +160,21 @@ namespace Nexile {
                                 m_webViewController = ctl;
                                 m_webViewController->get_CoreWebView2(&m_webView);
 
-                                // Use FULLY OPAQUE background rather than transparent for reliability
+                                // black background before first navigate
                                 Microsoft::WRL::ComPtr<ICoreWebView2Controller2> ctl2;
                                 if (SUCCEEDED(ctl->QueryInterface(IID_PPV_ARGS(&ctl2)))) {
-                                    // Make WebView background fully opaque with a dark color
-                                    // Using fully opaque background is much more reliable for rendering
-                                    COREWEBVIEW2_COLOR darkBackground{ 0xFF, 0x1E, 0x1E, 0x1E };
-                                    ctl2->put_DefaultBackgroundColor(darkBackground);
+                                    COREWEBVIEW2_COLOR black{ 0xFF,0x00,0x00,0x00 };
+                                    ctl2->put_DefaultBackgroundColor(black);
                                 }
 
-                                // Important: Set specific WebView settings
-                                ICoreWebView2Settings* settings = nullptr;
-                                m_webView->get_Settings(&settings);
-                                if (settings) {
-                                    // Enable JavaScript
-                                    settings->put_IsScriptEnabled(TRUE);
-                                    // Disable default context menus
-                                    settings->put_AreDefaultContextMenusEnabled(FALSE);
-                                    // Enable status bar
-                                    settings->put_IsStatusBarEnabled(FALSE);
-
-                                    // For WebView2 SDK version 1.0.1072 or higher
-                                    Microsoft::WRL::ComPtr<ICoreWebView2Settings3> settings3;
-                                    if (SUCCEEDED(settings->QueryInterface(IID_PPV_ARGS(&settings3)))) {
-                                        // Enable dedicated GPU acceleration if available
-                                        settings3->put_AreBrowserAcceleratorKeysEnabled(TRUE);
-                                    }
-                                }
-
-                                // Set WebView bounds to match window size
-                                RECT webViewRect{};
-                                GetClientRect(m_hwnd, &webViewRect);
-                                LOG_INFO("Setting WebView bounds: {},{} - {},{}",
-                                    webViewRect.left, webViewRect.top, webViewRect.right, webViewRect.bottom);
-                                m_webViewController->put_Bounds(webViewRect);
-
-                                // Set bounds to match window
-                                RECT rc{};
-                                GetClientRect(m_hwnd, &rc);
+                                RECT rc{}; GetClientRect(m_hwnd, &rc);
                                 m_webViewController->put_Bounds(rc);
 
-                                // Set up event handlers and navigate to welcome page
                                 SetupWebViewEventHandlers();
-                                NavigateWelcomePage();
+
+                                // Show welcome page on startup
+                                LoadWelcomePage();
+
                                 return S_OK;
                             }).Get());
                     return S_OK;
@@ -219,177 +190,448 @@ namespace Nexile {
     }
 
     // =============================================================
-    // Show the black welcome page
+    // Load the welcome page from HTML file or fallback to embedded
     // =============================================================
-    void OverlayWindow::NavigateWelcomePage() {
-        if (!m_webView) return;
+    void OverlayWindow::LoadWelcomePage() {
+        if (!m_webView) {
+            LOG_ERROR("Cannot load welcome page: WebView2 not initialized");
+            return;
+        }
 
-        // Create an extremely simple HTML page that will definitely display
+        // Try to load welcome.html file
+        std::string welcomePath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\welcome.html");
+        LOG_INFO("Attempting to load welcome page from: {}", welcomePath);
+
+        if (Utils::FileExists(welcomePath)) {
+            std::string htmlContent = Utils::ReadTextFile(welcomePath);
+            if (!htmlContent.empty()) {
+                m_webView->NavigateToString(Utils::StringToWideString(htmlContent).c_str());
+                LOG_INFO("Welcome page loaded from file");
+                return;
+            }
+        }
+
+        LOG_INFO("Welcome file not found, using built-in welcome page");
+
+        // Fallback to embedded welcome page
         const wchar_t* welcomeHTML = LR"(
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nexile Overlay</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Nexile</title>
     <style>
-        body {
+        html, body {
             margin: 0;
             padding: 0;
-            background-color: #1e1e1e;
-            color: white;
-            font-family: Arial, sans-serif;
-        }
-        .content {
             width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
             padding: 20px;
             box-sizing: border-box;
         }
-        h1 {
+
+        .logo {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 20px;
             color: #4a90e2;
-            text-align: center;
-            margin-top: 20px;
         }
-        .box {
-            background-color: #333;
-            border: 1px solid #555;
-            border-radius: 5px;
-            padding: 20px;
-            margin: 20px auto;
+
+        .subtitle {
+            font-size: 18px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .hotkeys {
+            background-color: rgba(40, 40, 40, 0.7);
+            border-radius: 8px;
+            padding: 15px 25px;
+            margin: 10px 0;
+            width: 80%;
             max-width: 600px;
         }
-        ul {
-            list-style: none;
-            padding-left: 0;
+
+        .hotkeys h2 {
+            color: #4a90e2;
+            margin-top: 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
         }
-        li {
-            padding: 10px;
-            margin-bottom: 5px;
-            border-bottom: 1px solid #444;
+
+        .hotkey-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 5px 0;
         }
+
+        .hotkey-combo {
+            background-color: rgba(30, 30, 30, 0.8);
+            padding: 5px 10px;
+            border-radius: 4px;
+            min-width: 80px;
+            text-align: center;
+            margin-left: 20px;
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+        }
+
+        .controls {
+            margin-top: 20px;
+        }
+
         .button {
+            display: inline-block;
             background-color: #4a90e2;
             color: white;
-            border: none;
             padding: 10px 20px;
             border-radius: 4px;
+            text-decoration: none;
+            margin: 0 10px;
             cursor: pointer;
-            display: inline-block;
-            margin: 10px;
+            transition: background-color 0.2s;
         }
+
         .button:hover {
             background-color: #3a80d2;
-        }
-        .buttons {
-            text-align: center;
         }
     </style>
 </head>
 <body>
-    <div class="content">
-        <h1>NEXILE</h1>
-        
-        <div class="box">
-            <h2>Available Hotkeys</h2>
-            <ul>
-                <li>Toggle Overlay: <strong>Ctrl+F1</strong></li>
-                <li>Price Check: <strong>Alt+D</strong></li>
-                <li>Settings: <strong>Ctrl+F2</strong></li>
-            </ul>
+    <div class="container">
+        <div class="logo">NEXILE</div>
+        <div class="subtitle">Game Overlay Assistant</div>
+
+        <div class="hotkeys">
+            <h2>Default Hotkeys</h2>
+            <div class="hotkey-item">
+                <span>Toggle Overlay</span>
+                <span class="hotkey-combo">Alt+Shift+O</span>
+            </div>
+            <div class="hotkey-item">
+                <span>Price Check (PoE)</span>
+                <span class="hotkey-combo">Alt+P</span>
+            </div>
+            <div class="hotkey-item">
+                <span>Open Settings</span>
+                <span class="hotkey-combo">Alt+Shift+S</span>
+            </div>
+            <div class="hotkey-item">
+                <span>Open Browser</span>
+                <span class="hotkey-combo">Alt+Shift+B</span>
+            </div>
         </div>
-        
-        <div class="buttons">
-            <button class="button" id="settings-button">Open Settings</button>
-            <button class="button" id="close-button">Close Overlay</button>
+
+        <div class="controls">
+            <a href="#" class="button" id="settings-button">Settings</a>
+            <a href="#" class="button" id="browser-button">Open Browser</a>
+            <a href="#" class="button" id="close-button">Close Overlay</a>
         </div>
+
+        <div class="footer">Nexile v0.1.0 | Press Alt+Shift+O to toggle overlay</div>
     </div>
 
     <script>
-        // Verbose logging to diagnose WebView issues
-        console.log('Welcome page script executing');
-        
-        try {
-            // Mark elements with visual changes to test rendering
-            document.body.style.border = "5px solid red";
-            console.log('Added red border to body');
-            
-            // Setup event handlers
-            document.getElementById('settings-button').onclick = function() {
-                console.log('Settings button clicked');
-                try {
-                    window.chrome.webview.postMessage(JSON.stringify({
-                        action: 'open_settings'
-                    }));
-                } catch(e) {
-                    console.error('Error sending settings message:', e);
-                    alert('Error: ' + e.message);
-                }
-            };
-            
-            document.getElementById('close-button').onclick = function() {
-                console.log('Close button clicked');
-                try {
-                    window.chrome.webview.postMessage(JSON.stringify({
-                        action: 'toggle_overlay'
-                    }));
-                } catch(e) {
-                    console.error('Error sending close message:', e);
-                    alert('Error: ' + e.message);
-                }
-            };
-            
-            // Listen for events from native host
-            window.chrome.webview.addEventListener('message', function(event) {
-                console.log('Received message from native host:', event.data);
+        document.addEventListener('DOMContentLoaded', function() {
+            // Setup button event handlers
+            document.getElementById('settings-button').addEventListener('click', function() {
+                // Send message to C++ host to open settings
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'open_settings'
+                }));
             });
-            
-            // Send test message to verify WebView communication
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'test',
-                message: 'WebView communication test'
-            }));
-            console.log('Test message sent to native code');
-            
-        } catch(e) {
-            console.error('Error in welcome page script:', e);
-            // Show error directly on page
-            var errorDiv = document.createElement('div');
-            errorDiv.style.backgroundColor = 'red';
-            errorDiv.style.color = 'white';
-            errorDiv.style.padding = '20px';
-            errorDiv.style.margin = '20px';
-            errorDiv.innerText = 'Error: ' + e.message;
-            document.body.appendChild(errorDiv);
-        }
+
+            document.getElementById('browser-button').addEventListener('click', function() {
+                // Send message to C++ host to open browser
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'open_browser'
+                }));
+            });
+
+            document.getElementById('close-button').addEventListener('click', function() {
+                // Send message to C++ host to close/hide overlay
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'toggle_overlay'
+                }));
+            });
+
+            // Listen for messages from the C++ host
+            window.chrome.webview.addEventListener('message', function(event) {
+                const message = JSON.parse(event.data);
+                // Handle messages from C++ host if needed
+            });
+        });
     </script>
 </body>
 </html>
 )";
 
-        // Directly set HTML content and verify it was sent
-        LOG_INFO("Setting welcome page HTML content");
-        HRESULT hr = m_webView->NavigateToString(welcomeHTML);
-        if (SUCCEEDED(hr)) {
-            LOG_INFO("Welcome page HTML set successfully");
-        }
-        else {
-            LOG_ERROR("Failed to set welcome page HTML, HRESULT: {}", HResultToHex(hr));
-        }
-
-        // Execute a simple script to verify WebView is working
-        std::wstring testScript = L"document.body.style.backgroundColor = '#1e1e1e'; console.log('Test script executed successfully'); true;";
-        m_webView->ExecuteScript(testScript.c_str(), nullptr);
-
-        LOG_INFO("Loading built-in welcome page");
+        // Directly set HTML content
+        m_webView->NavigateToString(welcomeHTML);
     }
 
     // =============================================================
-    // Load the main overlay UI
+    // Load browser page
+    // =============================================================
+    void OverlayWindow::LoadBrowserPage() {
+        if (!m_webView) {
+            LOG_ERROR("Cannot load browser page: WebView2 not initialized");
+            return;
+        }
+
+        // Create a browser UI with search box
+        const wchar_t* browserHTML = LR"(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexile Browser</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(20, 20, 20, 0.9);
+            color: white;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        .browser-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .address-bar {
+            display: flex;
+            padding: 10px;
+            background-color: rgba(40, 40, 40, 0.8);
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .address-input {
+            flex-grow: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 3px;
+            background-color: rgba(60, 60, 60, 0.8);
+            color: white;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+
+        .address-input:focus {
+            outline: none;
+            background-color: rgba(70, 70, 70, 0.8);
+        }
+
+        .navigation-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .nav-button {
+            background-color: #4a90e2;
+            border: none;
+            border-radius: 3px;
+            color: white;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .nav-button:hover {
+            background-color: #3a80d2;
+        }
+
+        .content-frame {
+            flex-grow: 1;
+            border: none;
+            background-color: white;
+            border-radius: 5px;
+        }
+
+        .status-bar {
+            padding: 8px;
+            background-color: rgba(40, 40, 40, 0.8);
+            border-radius: 3px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .bookmarks {
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            background-color: rgba(40, 40, 40, 0.8);
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .bookmark {
+            background-color: #333;
+            color: #ddd;
+            padding: 6px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .bookmark:hover {
+            background-color: #444;
+        }
+    </style>
+</head>
+<body>
+    <div class="browser-container">
+        <div class="address-bar">
+            <input type="text" class="address-input" id="urlInput" placeholder="Enter URL or search term..." />
+            <div class="navigation-buttons">
+                <button class="nav-button" id="goButton">Go</button>
+                <button class="nav-button" id="backButton">←</button>
+                <button class="nav-button" id="homeButton">Home</button>
+                <button class="nav-button" id="closeButton">Close</button>
+            </div>
+        </div>
+
+        <div class="bookmarks">
+            <div class="bookmark" data-url="https://www.google.com">Google</div>
+            <div class="bookmark" data-url="https://www.reddit.com/r/pathofexile">PoE Reddit</div>
+            <div class="bookmark" data-url="https://www.poelab.com">PoE Lab</div>
+            <div class="bookmark" data-url="https://www.poe.ninja">poe.ninja</div>
+            <div class="bookmark" data-url="https://www.poedb.tw">PoeDB</div>
+        </div>
+
+        <iframe id="contentFrame" class="content-frame" src="about:blank"></iframe>
+
+        <div class="status-bar" id="statusBar">Ready</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlInput = document.getElementById('urlInput');
+            const goButton = document.getElementById('goButton');
+            const backButton = document.getElementById('backButton');
+            const homeButton = document.getElementById('homeButton');
+            const closeButton = document.getElementById('closeButton');
+            const contentFrame = document.getElementById('contentFrame');
+            const statusBar = document.getElementById('statusBar');
+            const bookmarks = document.querySelectorAll('.bookmark');
+
+            // Function to navigate to a URL
+            function navigateToUrl(url) {
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = 'https://' + url;
+                }
+                
+                try {
+                    contentFrame.src = url;
+                    urlInput.value = url;
+                    statusBar.textContent = 'Loading: ' + url;
+                } catch (error) {
+                    statusBar.textContent = 'Error: ' + error.message;
+                }
+            }
+
+            // Handle Go button and Enter key
+            goButton.addEventListener('click', function() {
+                if (urlInput.value.trim()) {
+                    navigateToUrl(urlInput.value.trim());
+                }
+            });
+
+            urlInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && urlInput.value.trim()) {
+                    navigateToUrl(urlInput.value.trim());
+                }
+            });
+
+            // Handle back button
+            backButton.addEventListener('click', function() {
+                contentFrame.contentWindow.history.back();
+            });
+
+            // Handle home button
+            homeButton.addEventListener('click', function() {
+                navigateToUrl('https://www.google.com');
+            });
+
+            // Handle close button
+            closeButton.addEventListener('click', function() {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'close_browser'
+                }));
+            });
+
+            // Handle bookmark clicks
+            bookmarks.forEach(bookmark => {
+                bookmark.addEventListener('click', function() {
+                    const url = this.getAttribute('data-url');
+                    if (url) {
+                        navigateToUrl(url);
+                    }
+                });
+            });
+
+            // Handle iframe load events
+            contentFrame.addEventListener('load', function() {
+                statusBar.textContent = 'Loaded: ' + contentFrame.src;
+                urlInput.value = contentFrame.src;
+            });
+
+            // Set initial page
+            navigateToUrl('https://www.google.com');
+        });
+    </script>
+</body>
+</html>
+)";
+
+        // Directly set HTML content
+        m_webView->NavigateToString(browserHTML);
+
+        // Make overlay interactive for browser use
+        SetClickThrough(false);
+        LOG_INFO("Browser page loaded");
+    }
+
+    // =============================================================
+    // Load main overlay UI
     // =============================================================
     void OverlayWindow::LoadMainOverlayUI() {
         if (!m_webView) {
             LOG_ERROR("Cannot load main overlay UI: WebView2 not initialized");
             return;
         }
+
         std::string htmlPath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\main_overlay.html");
         LOG_INFO("Loading main overlay HTML from: {}", htmlPath);
 
@@ -397,26 +639,29 @@ namespace Nexile {
             LOG_ERROR("Main overlay HTML file not found: {}", htmlPath);
             htmlPath = Utils::CombinePath(Utils::GetModulePath(), "..\\HTML\\main_overlay.html");
             LOG_INFO("Trying alternative path: {}", htmlPath);
+
             if (!Utils::FileExists(htmlPath)) {
                 LOG_ERROR("Alternative path also failed, creating default HTML content");
-                std::wstring fallback = L"<html><head><title>Nexile Overlay</title><style>body{background:rgba(30,30,30,0.8);color:#fff;font-family:Arial;padding:20px}</style></head><body><h1>Nexile Overlay</h1><p>Press Alt+D to check item prices in Path of Exile</p></body></html>";
+                std::wstring fallback = L"<html><head><title>Nexile Overlay</title><style>body{background:#1e1e1ecc;color:#fff;font-family:Arial;padding:20px}</style></head><body><h1>Nexile Overlay</h1><p>Press Alt+P to check item prices in Path of Exile</p></body></html>";
                 m_webView->NavigateToString(fallback.c_str());
                 return;
             }
         }
+
         std::wstring url = L"file:///" + Utils::StringToWideString(htmlPath);
         std::replace(url.begin(), url.end(), L'\\', L'/');
         m_webView->Navigate(url.c_str());
     }
 
     // =============================================================
-    // Setup WebView event handlers
+    // Setup WebView2 event handlers
     // =============================================================
     void OverlayWindow::SetupWebViewEventHandlers() {
         if (!m_webView) {
             LOG_ERROR("Cannot setup WebView event handlers: WebView2 not initialized");
             return;
         }
+
         m_webView->add_WebMessageReceived(
             Microsoft::WRL::Callback<ICoreWebView2WebMessageReceivedEventHandler>(
                 [this](ICoreWebView2* /*sender*/, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
@@ -431,191 +676,108 @@ namespace Nexile {
                 }).Get(),
                     &m_webMessageReceivedToken);
 
-        // Add this script to all pages to enable messaging
         m_webView->AddScriptToExecuteOnDocumentCreated(
             L"window.chrome.webview.addEventListener('message', e=>window.postMessage(e.data,'*'));", nullptr);
-
 #ifdef _DEBUG
-        // Open developer tools in debug mode
         m_webView->OpenDevToolsWindow();
 #endif
         LOG_INFO("WebView2 event handlers setup complete");
     }
 
     // =============================================================
-    // Load module UI - updated to support multiple filename patterns
+    // Message dispatch from WebView to native callbacks
     // =============================================================
-    void OverlayWindow::LoadModuleUI(const std::shared_ptr<IModule>& module)
-    {
-        if (!m_webView || !module)
-        {
-            LOG_ERROR("Cannot load module UI: WebView or module not initialized");
+    void OverlayWindow::HandleWebMessage(const std::wstring& message) {
+        std::lock_guard<std::mutex> lock(m_callbackMutex);
+
+        // First, check if we need to handle browser-related messages
+        std::string msgStr = Utils::WideStringToString(message);
+        if (msgStr.find("open_browser") != std::string::npos) {
+            LoadBrowserPage();
+            return;
+        }
+        else if (msgStr.find("close_browser") != std::string::npos) {
+            LoadWelcomePage();
             return;
         }
 
-        std::string moduleId = module->GetModuleID();
-        LOG_INFO("Loading UI for module: {}", moduleId);
-
-        // Try multiple possible filenames
-        std::string htmlPath;
-        std::string htmlContent;
-
-        // First try moduleId_module.html
-        std::string htmlFileName = moduleId + "_module.html";
-        htmlPath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\" + htmlFileName);
-
-        if (Utils::FileExists(htmlPath))
-        {
-            LOG_INFO("Loading module HTML from file: {}", htmlPath);
-            htmlContent = Utils::ReadTextFile(htmlPath);
-        }
-        else
-        {
-            // Then try just moduleId.html
-            htmlFileName = moduleId + ".html";
-            htmlPath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\" + htmlFileName);
-
-            if (Utils::FileExists(htmlPath))
-            {
-                LOG_INFO("Loading module HTML from file: {}", htmlPath);
-                htmlContent = Utils::ReadTextFile(htmlPath);
-            }
-            else
-            {
-                LOG_WARNING("Module HTML files not found: tried {}_module.html and {}.html", moduleId, moduleId);
-            }
-        }
-
-        // If we couldn't load from file, get HTML from the module
-        if (htmlContent.empty())
-        {
-            LOG_INFO("Using HTML content from module");
-            htmlContent = module->GetModuleUIHTML();
-        }
-
-        if (htmlContent.empty())
-        {
-            LOG_WARNING("Module returned empty HTML, creating default content");
-            std::stringstream ss;
-            ss << "<html><head><title>" << module->GetModuleName() << "</title>";
-            ss << "<style>body{background-color:rgba(30,30,30,0.8);color:#fff;font-family:Arial;padding:20px}</style></head><body>";
-            ss << "<h1>" << module->GetModuleName() << "</h1><p>" << module->GetModuleDescription() << "</p></body></html>";
-            htmlContent = ss.str();
-        }
-
-        LOG_INFO("Setting HTML content for module: {} (content length: {})", moduleId, htmlContent.length());
-        m_webView->NavigateToString(Utils::StringToWideString(htmlContent).c_str());
-    }
-
-    // =============================================================
-    //  Message dispatch from WebView to native callbacks
-    // =============================================================
-    void OverlayWindow::HandleWebMessage(const std::wstring& message)
-    {
-        std::lock_guard<std::mutex> lock(m_callbackMutex);
+        // Forward message to registered callbacks
         for (auto& cb : m_webMessageCallbacks) cb(message);
     }
 
-    void OverlayWindow::RegisterWebMessageCallback(WebMessageCallback cb)
-    {
+    // =============================================================
+    // Register callback for web messages
+    // =============================================================
+    void OverlayWindow::RegisterWebMessageCallback(WebMessageCallback cb) {
         std::lock_guard<std::mutex> lock(m_callbackMutex);
         m_webMessageCallbacks.emplace_back(std::move(cb));
     }
 
     // =============================================================
-    //  Show / hide overlay window
+    // Show/hide overlay window
     // =============================================================
-    void OverlayWindow::Show()
-    {
-        if (!m_hwnd)
-        {
+    void OverlayWindow::Show() {
+        if (!m_hwnd) {
             LOG_ERROR("Cannot show overlay: window not initialized");
             return;
         }
 
         m_visible = true;
-
-        // Important: Use SW_SHOWNORMAL for proper visibility
-        ShowWindow(m_hwnd, SW_SHOWNORMAL);
+        ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
         LOG_INFO("Overlay window shown");
 
-        // Make sure we're the topmost window
-        SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-
-        if (m_webViewController)
-        {
-            RECT bounds{};
-            GetClientRect(m_hwnd, &bounds);
-            LOG_INFO("Window client rect: {}x{}", bounds.right, bounds.bottom);
-            m_webViewController->put_Bounds(bounds);
-
-            // Force a complete repaint - critical for visibility
-            InvalidateRect(m_hwnd, NULL, TRUE);
-            UpdateWindow(m_hwnd);
-
-            // Attempt to refresh WebView content
-            if (m_webView) {
-                m_webView->Reload();
-            }
+        if (m_webViewController) {
+            RECT rc{}; GetClientRect(m_hwnd, &rc);
+            m_webViewController->put_Bounds(rc);
         }
     }
 
-    void OverlayWindow::Hide()
-    {
-        if (!m_hwnd)
-        {
+    void OverlayWindow::Hide() {
+        if (!m_hwnd) {
             LOG_ERROR("Cannot hide overlay: window not initialized");
             return;
         }
+
         m_visible = false;
         ShowWindow(m_hwnd, SW_HIDE);
         LOG_INFO("Overlay window hidden");
     }
 
     // =============================================================
-    //  Move/resize (called by main app)
+    // Set window position and size
     // =============================================================
-    void OverlayWindow::SetPosition(const RECT& rect)
-    {
-        if (!m_hwnd || !m_webViewController)
-        {
+    void OverlayWindow::SetPosition(const RECT& rect) {
+        if (!m_hwnd || !m_webViewController) {
             LOG_ERROR("Cannot set position: window or WebView controller not initialized");
             return;
         }
 
-        // Use SWP_SHOWWINDOW to ensure window is visible
         SetWindowPos(
             m_hwnd, HWND_TOPMOST,
             rect.left, rect.top,
             rect.right - rect.left,
             rect.bottom - rect.top,
-            SWP_SHOWWINDOW);
+            SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
-        // Update WebView bounds to match window size
-        m_webViewController->put_Bounds({ 0, 0, rect.right - rect.left, rect.bottom - rect.top });
-
-        // Force repaint to ensure content is displayed
-        InvalidateRect(m_hwnd, NULL, TRUE);
-        UpdateWindow(m_hwnd);
+        m_webViewController->put_Bounds({ 0,0, rect.right - rect.left, rect.bottom - rect.top });
     }
 
     // =============================================================
-    //  Navigation / scripting helpers
+    // Navigation helpers
     // =============================================================
-    void OverlayWindow::Navigate(const std::wstring& uri)
-    {
-        if (m_webView)
-        {
+    void OverlayWindow::Navigate(const std::wstring& uri) {
+        if (m_webView) {
             LOG_INFO("Navigating WebView to: {}", Utils::WideStringToString(uri));
             m_webView->Navigate(uri.c_str());
         }
         else LOG_ERROR("Cannot navigate: WebView not initialized");
     }
 
-    void OverlayWindow::ExecuteScript(const std::wstring& script)
-    {
-        if (!m_webView)
-        {
+    // =============================================================
+    // Execute JavaScript in WebView
+    // =============================================================
+    void OverlayWindow::ExecuteScript(const std::wstring& script) {
+        if (!m_webView) {
             LOG_ERROR("Cannot execute script: WebView not initialized");
             return;
         }
@@ -623,8 +785,7 @@ namespace Nexile {
         m_webView->ExecuteScript(
             script.c_str(),
             Microsoft::WRL::Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
-                [](HRESULT hr, LPCWSTR) -> HRESULT
-                {
+                [](HRESULT hr, LPCWSTR) -> HRESULT {
                     if (FAILED(hr))
                         LOG_ERROR("Script execution failed, HRESULT: 0x%08X", static_cast<unsigned int>(hr));
                     return S_OK;
@@ -632,47 +793,74 @@ namespace Nexile {
     }
 
     // =============================================================
-    //  Mouse transparency toggle
+    // Set click-through mode
     // =============================================================
-    void OverlayWindow::SetClickThrough(bool clickThrough)
-    {
-        if (!m_hwnd)
-        {
+    void OverlayWindow::SetClickThrough(bool clickThrough) {
+        if (!m_hwnd) {
             LOG_ERROR("Cannot set click-through: window not initialized");
             return;
         }
 
         m_clickThrough = clickThrough;
         LONG exStyle = GetWindowLong(m_hwnd, GWL_EXSTYLE);
-
-        if (clickThrough) {
-            // Add WS_EX_TRANSPARENT flag to make window click-through
-            exStyle |= WS_EX_TRANSPARENT;
-        }
-        else {
-            // Remove WS_EX_TRANSPARENT flag to make window capture clicks
-            exStyle &= ~WS_EX_TRANSPARENT;
-        }
-
+        exStyle = clickThrough ? (exStyle | WS_EX_TRANSPARENT)
+            : (exStyle & ~WS_EX_TRANSPARENT);
         SetWindowLong(m_hwnd, GWL_EXSTYLE, exStyle);
         LOG_INFO("Overlay click-through set to: {}", clickThrough);
     }
 
-    std::wstring OverlayWindow::CreateModuleLoaderHTML()
-    {
-        return L""; // placeholder 
+    // =============================================================
+    // Load a module's UI
+    // =============================================================
+    void OverlayWindow::LoadModuleUI(const std::shared_ptr<IModule>& module) {
+        if (!m_webView || !module) {
+            LOG_ERROR("Cannot load module UI: WebView or module not initialized");
+            return;
+        }
+
+        std::string moduleId = module->GetModuleID();
+        LOG_INFO("Loading UI for module: {}", moduleId);
+
+        std::string htmlFileName = moduleId + "_module.html";
+        std::string htmlPath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\" + htmlFileName);
+
+        if (Utils::FileExists(htmlPath)) {
+            LOG_INFO("Loading module HTML from file: {}", htmlPath);
+            std::string htmlContent = Utils::ReadTextFile(htmlPath);
+            if (!htmlContent.empty()) {
+                m_webView->NavigateToString(Utils::StringToWideString(htmlContent).c_str());
+                return;
+            }
+            LOG_ERROR("Failed to read HTML content from file: {}", htmlPath);
+        }
+        else LOG_WARNING("Module HTML file not found: {}", htmlPath);
+
+        std::string htmlContent = module->GetModuleUIHTML();
+        if (htmlContent.empty()) {
+            LOG_WARNING("Module returned empty HTML, creating default content");
+            std::stringstream ss;
+            ss << "<html><head><title>" << module->GetModuleName() << "</title>";
+            ss << "<style>body{background-color:rgba(30,30,30,0.8);color:#fff;font-family:Arial;padding:20px}</style></head><body>";
+            ss << "<h1>" << module->GetModuleName() << "</h1><p>" << module->GetModuleDescription() << "</p></body></html>";
+            htmlContent = ss.str();
+        }
+        m_webView->NavigateToString(Utils::StringToWideString(htmlContent).c_str());
     }
 
     // =============================================================
-    //  Window message handler (resize & destroy)
+    // Create module loader HTML
     // =============================================================
-    LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-    {
-        switch (uMsg)
-        {
+    std::wstring OverlayWindow::CreateModuleLoaderHTML() {
+        return L""; // Not implemented - would be used for module UI wrapper
+    }
+
+    // =============================================================
+    // Window message handler
+    // =============================================================
+    LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+        switch (uMsg) {
         case WM_SIZE:
-            if (m_webViewController)
-            {
+            if (m_webViewController) {
                 RECT rc{}; GetClientRect(hwnd, &rc);
                 m_webViewController->put_Bounds(rc);
             }

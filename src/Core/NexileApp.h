@@ -9,11 +9,11 @@
 #include <atomic>
 #include <chrono>
 
-#include "UI/OverlayWindow.h"
-#include "Modules/ModuleInterface.h"
-#include "Game/GameDetector.h"
-#include "Input/HotkeyManager.h"
-#include "Config/ProfileManager.h"
+#include "../UI/OverlayWindow.h"
+#include "../Modules/ModuleInterface.h"
+#include "../Game/GameDetector.h"
+#include "../Input/HotkeyManager.h"
+#include "../Config/ProfileManager.h"
 
 namespace Nexile {
 
@@ -136,6 +136,9 @@ namespace Nexile {
 
         // Overlay visible flag
         bool m_overlayVisible = false;
+
+        // Settings mode flag
+        bool m_inSettingsMode = false;
 
         // Tray icon data
         NOTIFYICONDATA m_trayIconData = {};

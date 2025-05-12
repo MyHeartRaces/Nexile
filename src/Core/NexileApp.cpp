@@ -310,6 +310,15 @@ namespace Nexile {
             ToggleOverlay();
             return;
         }
+        else if (hotkeyId == HotkeyManager::HOTKEY_BROWSER) {
+            // Show overlay and load browser page
+            if (m_overlayWindow) {
+                m_overlayWindow->SetClickThrough(false); // Make overlay interactive for browser
+                m_overlayWindow->LoadBrowserPage();
+                SetOverlayVisible(true);
+            }
+            return;
+        }
 
         // Let modules handle their hotkeys
         for (auto& [id, module] : m_modules) {
@@ -361,9 +370,10 @@ namespace Nexile {
             auto settingsModule = std::make_shared<SettingsModule>();
             m_modules["settings"] = settingsModule;
 
-            // Register hotkey for settings
+            // Register hotkey for settings and browser
             if (m_hotkeyManager) {
-                m_hotkeyManager->RegisterHotkey(MOD_CONTROL, VK_F2, HotkeyManager::HOTKEY_GAME_SETTINGS);
+                m_hotkeyManager->RegisterHotkey(MOD_ALT | MOD_SHIFT, 'S', HotkeyManager::HOTKEY_GAME_SETTINGS);
+                m_hotkeyManager->RegisterHotkey(MOD_ALT | MOD_SHIFT, 'B', HotkeyManager::HOTKEY_BROWSER);
             }
 
             // Scan modules directory for plugin DLLs

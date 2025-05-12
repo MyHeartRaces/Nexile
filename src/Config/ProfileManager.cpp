@@ -1,6 +1,7 @@
 #include "ProfileManager.h"
 #include "../Input/HotkeyManager.h"
 #include "../UI/OverlayWindow.h"
+#include "../Utils/Logger.h"
 
 #include <Windows.h>
 #include <ShlObj.h>
