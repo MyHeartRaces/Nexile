@@ -85,31 +85,15 @@ namespace Nexile {
     void OverlayWindow::CenterWindow() {
         if (!m_hwnd) return;
 
-        // Get handle to the current foreground window (likely the game window)
-        HWND activeWnd = GetForegroundWindow();
-
-        // If no active window or it's our own window, use primary monitor
-        if (!activeWnd || activeWnd == m_hwnd) {
-            int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-            int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-            RECT rc;
-            GetWindowRect(m_hwnd, &rc);
-            int width = rc.right - rc.left;
-            int height = rc.bottom - rc.top;
-
-            int x = (screenWidth - width) / 2;
-            int y = (screenHeight - height) / 2;
-
-            SetWindowPos(m_hwnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
-            return;
-        }
-
-        // Get monitor info for the monitor containing the active window
-        HMONITOR hMon = MonitorFromWindow(activeWnd, MONITOR_DEFAULTTOPRIMARY);
-        MONITORINFO mi;
+        // Always use primary monitor for window positioning
+        HMONITOR hPrimaryMon = MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi = { 0 };
         mi.cbSize = sizeof(MONITORINFO);
-        GetMonitorInfo(hMon, &mi);
+        GetMonitorInfo(hPrimaryMon, &mi);
+
+        // Calculate size and position based on the primary monitor's bounds
+        int monWidth = mi.rcMonitor.right - mi.rcMonitor.left;
+        int monHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
         // Get window dimensions
         RECT rc;
@@ -117,12 +101,26 @@ namespace Nexile {
         int width = rc.right - rc.left;
         int height = rc.bottom - rc.top;
 
-        // Calculate center position on the same monitor as the active window
-        int x = mi.rcMonitor.left + (mi.rcMonitor.right - mi.rcMonitor.left - width) / 2;
-        int y = mi.rcMonitor.top + (mi.rcMonitor.bottom - mi.rcMonitor.top - height) / 2;
+        // Ensure window size fits within monitor bounds
+        if (width > monWidth) width = monWidth - 40; // Leave small margin
+        if (height > monHeight) height = monHeight - 40;
+
+        // Center within the monitor
+        int x = mi.rcMonitor.left + (monWidth - width) / 2;
+        int y = mi.rcMonitor.top + (monHeight - height) / 2;
+
+        // Ensure the window is fully contained within the monitor bounds
+        if (x + width > mi.rcMonitor.right) x = mi.rcMonitor.right - width;
+        if (y + height > mi.rcMonitor.bottom) y = mi.rcMonitor.bottom - height;
+        if (x < mi.rcMonitor.left) x = mi.rcMonitor.left;
+        if (y < mi.rcMonitor.top) y = mi.rcMonitor.top;
+
+        LOG_INFO("Centering window on primary monitor ({}, {}, {}, {}), window ({}, {}, {}, {})",
+            mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom,
+            x, y, width, height);
 
         // Set the position
-        SetWindowPos(m_hwnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+        SetWindowPos(m_hwnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
     }
 
     void OverlayWindow::InitializeWebView() {
@@ -570,6 +568,21 @@ namespace Nexile {
 
         const wchar_t* browserHTML_part9 = LR"(
     <script>
+        // Custom postMessage polyfill to ensure reliable communication
+        window.originalPostMessage = window.postMessage;
+        window.postMessage = function(message) {
+            try {
+                if (window.chrome && window.chrome.webview) {
+                    const strMessage = typeof message === 'string' ? message : JSON.stringify(message);
+                    window.chrome.webview.postMessage(strMessage);
+                } else {
+                    window.originalPostMessage(message, '*');
+                }
+            } catch (e) {
+                console.error('Error in postMessage:', e);
+            }
+        };
+    
         document.addEventListener('DOMContentLoaded', function() {
             const urlInput = document.getElementById('urlInput');
             const goButton = document.getElementById('goButton');
@@ -726,6 +739,40 @@ namespace Nexile {
             return;
         }
 
+        // Configure WebView settings first
+        Microsoft::WRL::ComPtr<ICoreWebView2Settings> settings;
+        if (SUCCEEDED(m_webView->get_Settings(&settings))) {
+            settings->put_IsScriptEnabled(TRUE);
+            settings->put_AreDefaultScriptDialogsEnabled(TRUE);
+            settings->put_IsWebMessageEnabled(TRUE);
+
+            // Try to get advanced settings if available
+            Microsoft::WRL::ComPtr<ICoreWebView2Settings3> settings3;
+            if (SUCCEEDED(settings.As(&settings3))) {
+                // Allow iframe navigation to any domain
+                settings3->put_AreBrowserAcceleratorKeysEnabled(TRUE);
+            }
+
+            // Try to get additional settings
+            Microsoft::WRL::ComPtr<ICoreWebView2Settings4> settings4;
+            if (SUCCEEDED(settings.As(&settings4))) {
+                // Ensure iframes can be properly shown
+                settings4->put_IsGeneralAutofillEnabled(TRUE);
+            }
+        }
+
+        // Configure WebView permissions
+        m_webView->add_PermissionRequested(
+            Microsoft::WRL::Callback<ICoreWebView2PermissionRequestedEventHandler>(
+                [](ICoreWebView2* /*sender*/, ICoreWebView2PermissionRequestedEventArgs* args) -> HRESULT {
+                    COREWEBVIEW2_PERMISSION_KIND kind;
+                    args->get_PermissionKind(&kind);
+
+                    // Allow all permissions that might be needed for iframe content
+                    args->put_State(COREWEBVIEW2_PERMISSION_STATE_ALLOW);
+                    return S_OK;
+                }).Get(), nullptr);
+
         m_webView->add_WebMessageReceived(
             Microsoft::WRL::Callback<ICoreWebView2WebMessageReceivedEventHandler>(
                 [this](ICoreWebView2* /*sender*/, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
@@ -771,17 +818,51 @@ namespace Nexile {
                 }).Get(),
                     &m_navigationCompletedToken);
 
-        m_webView->AddScriptToExecuteOnDocumentCreated(
-            L"window.chrome = window.chrome || {}; window.chrome.webview = { postMessage: function(data) { window.external.notify(data); } };"
-            L"window.addEventListener('message', function(e) { if(e.data && typeof e.data === 'string') try { window.chrome.webview.postMessage(e.data); } catch(ex) {} });", nullptr);
+        // Configure proper WebView-to-JS communication
+        const wchar_t* initScript = LR"(
+            window.chrome = window.chrome || {};
+            window.chrome.webview = {
+                postMessage: function(data) {
+                    window.chrome.webview.hostObjects.sync.bridge.postMessage(data);
+                }
+            };
+            
+            // Set up message listener that works in both directions
+            window.addEventListener('message', function(e) {
+                if (!e.data) return;
+                try {
+                    // Handle both string and object messages
+                    const data = typeof e.data === 'string' ? e.data : JSON.stringify(e.data);
+                    window.chrome.webview.postMessage(data);
+                } catch(ex) {
+                    console.error('Failed to post message:', ex);
+                }
+            });
+            
+            // Create a global event listener for settings
+            window.applySettings = function(settings) {
+                document.dispatchEvent(new CustomEvent('applySettings', { detail: settings }));
+            };
+        )";
 
-        // Add event handler for external.notify
-        Microsoft::WRL::ComPtr<ICoreWebView2Settings> settings;
-        if (SUCCEEDED(m_webView->get_Settings(&settings))) {
-            settings->put_IsScriptEnabled(TRUE);
-            settings->put_AreDefaultScriptDialogsEnabled(TRUE);
-            settings->put_IsWebMessageEnabled(TRUE);
-        }
+        m_webView->AddScriptToExecuteOnDocumentCreated(initScript, nullptr);
+
+        // Add direct message handler - simpler approach without host objects
+        m_webView->AddScriptToExecuteOnDocumentCreated(
+            L"window.chrome = window.chrome || {};"
+            L"window.chrome.webview = {"
+            L"  postMessage: function(data) {"
+            L"    window.external.notify(data);"
+            L"  }"
+            L"};"
+            L"window.addEventListener('message', function(e) {"
+            L"  if (e.data) {"
+            L"    try {"
+            L"      const message = typeof e.data === 'string' ? e.data : JSON.stringify(e.data);"
+            L"      window.chrome.webview.postMessage(message);"
+            L"    } catch(ex) { console.error('Message error:', ex); }"
+            L"  }"
+            L"});", nullptr);
 
 #ifdef _DEBUG
         m_webView->OpenDevToolsWindow();
@@ -893,31 +974,43 @@ namespace Nexile {
             return;
         }
 
-        // Get the monitor containing the target rect
-        HMONITOR hMon = MonitorFromRect(&rect, MONITOR_DEFAULTTOPRIMARY);
-        MONITORINFO mi;
+        // Always use primary monitor to ensure the window is fully visible
+        HMONITOR hPrimaryMon = MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi = { 0 };
         mi.cbSize = sizeof(MONITORINFO);
-        GetMonitorInfo(hMon, &mi);
+        GetMonitorInfo(hPrimaryMon, &mi);
 
-        // Ensure the window stays within this monitor's bounds
-        RECT adjustedRect = rect;
-        if (adjustedRect.right > mi.rcMonitor.right)
-            adjustedRect.right = mi.rcMonitor.right;
-        if (adjustedRect.bottom > mi.rcMonitor.bottom)
-            adjustedRect.bottom = mi.rcMonitor.bottom;
-        if (adjustedRect.left < mi.rcMonitor.left)
-            adjustedRect.left = mi.rcMonitor.left;
-        if (adjustedRect.top < mi.rcMonitor.top)
-            adjustedRect.top = mi.rcMonitor.top;
+        // Calculate size and position based on the primary monitor's bounds
+        int monWidth = mi.rcMonitor.right - mi.rcMonitor.left;
+        int monHeight = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
+        // Set a fixed size that fits within the primary monitor
+        int width = static_cast<int>(min(monWidth * 0.8, 1280.0));  // Max width 1280 or 80% of monitor
+        int height = static_cast<int>(min(monHeight * 0.8, 960.0)); // Max height 960 or 80% of monitor
+
+        // Center within the primary monitor - ensure it stays fully on screen
+        int x = mi.rcMonitor.left + (monWidth - width) / 2;
+        int y = mi.rcMonitor.top + (monHeight - height) / 2;
+
+        // Ensure the window is fully contained within the monitor bounds
+        if (x + width > mi.rcMonitor.right) x = mi.rcMonitor.right - width;
+        if (y + height > mi.rcMonitor.bottom) y = mi.rcMonitor.bottom - height;
+        if (x < mi.rcMonitor.left) x = mi.rcMonitor.left;
+        if (y < mi.rcMonitor.top) y = mi.rcMonitor.top;
+
+        // Log the positioning information
+        LOG_INFO("Setting overlay window position: primary monitor ({}, {}, {}, {}), window ({}, {}, {}, {})",
+            mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom,
+            x, y, width, height);
+
+        // Set the window position and size
         SetWindowPos(
             m_hwnd, HWND_TOPMOST,
-            adjustedRect.left, adjustedRect.top,
-            adjustedRect.right - adjustedRect.left,
-            adjustedRect.bottom - adjustedRect.top,
+            x, y, width, height,
             SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
-        m_webViewController->put_Bounds({ 0,0, adjustedRect.right - adjustedRect.left, adjustedRect.bottom - adjustedRect.top });
+        // Update the WebView bounds to match the window
+        m_webViewController->put_Bounds({ 0, 0, width, height });
     }
 
     void OverlayWindow::Navigate(const std::wstring& uri) {
@@ -1318,10 +1411,18 @@ namespace Nexile {
                     }
                 };
 
-                window.chrome.webview.postMessage(JSON.stringify({
-                    action: 'save_settings',
-                    settings: settings
-                }));
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage(JSON.stringify({
+                        action: 'save_settings',
+                        settings: settings
+                    }));
+                } else {
+                    // Fallback method
+                    window.postMessage({
+                        action: 'save_settings',
+                        settings: settings
+                    }, '*');
+                }
             });)";
 
             const wchar_t* settingsHTML_part17 = LR"(
