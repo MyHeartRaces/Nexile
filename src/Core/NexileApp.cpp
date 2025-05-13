@@ -15,66 +15,62 @@ namespace Nexile {
     // Initialize static instance
     NexileApp* NexileApp::s_instance = nullptr;
 
-    NexileApp::NexileApp(HINSTANCE hInstance) : m_hInstance(hInstance), m_activeGame(GameID::None), m_overlayVisible(false) {
+    NexileApp::NexileApp(HINSTANCE hInstance) : m_hInstance(hInstance), m_activeGame(GameID::None),
+        m_overlayVisible(false), m_inSettingsMode(false), m_browserOpen(false) {
         // Store instance for window procedure
         s_instance = this;
 
-        try {
-            // Initialize application window
-            InitializeWindow();
+        // Initialize application window
+        InitializeWindow();
 
-            // Create managers and components
-            m_profileManager = std::make_unique<ProfileManager>();
-            m_hotkeyManager = std::make_unique<HotkeyManager>(this);
-            m_gameDetector = std::make_unique<GameDetector>();
-            m_overlayWindow = std::make_unique<OverlayWindow>(this);
+        // Create managers and components
+        m_profileManager = std::make_unique<ProfileManager>();
+        m_hotkeyManager = std::make_unique<HotkeyManager>(this);
+        m_gameDetector = std::make_unique<GameDetector>();
+        m_overlayWindow = std::make_unique<OverlayWindow>(this);
 
-            // Set overlay window in profile manager
-            m_profileManager->SetOverlayWindow(m_overlayWindow.get());
+        // Set overlay window in profile manager
+        m_profileManager->SetOverlayWindow(m_overlayWindow.get());
 
-            // Initialize modules
-            InitializeModules();
+        // Setup hotkey manager
+        m_profileManager->SetHotkeyManager(std::move(m_hotkeyManager));
+        m_hotkeyManager.reset(m_profileManager->GetHotkeyManager());
 
-            // Register hotkeys
+        // Initialize modules
+        InitializeModules();
+
+        // Register hotkeys
+        if (m_hotkeyManager) {
             m_hotkeyManager->RegisterGlobalHotkeys();
-
-            // Add system tray icon
-            AddTrayIcon();
-
-            // Initialize idle timer
-            m_lastActivityTime = std::chrono::steady_clock::now();
-            m_idleTimerStarted = false;
-
-            LOG_INFO("Nexile initialized successfully");
         }
-        catch (const std::exception& e) {
-            LOG_ERROR("Failed to initialize Nexile: {}", e.what());
-            throw;
-        }
+
+        // Add system tray icon
+        AddTrayIcon();
+
+        // Initialize idle timer
+        m_lastActivityTime = std::chrono::steady_clock::now();
+        m_idleTimerStarted = false;
+
+        LOG_INFO("Nexile initialized successfully");
     }
 
     NexileApp::~NexileApp() {
-        try {
-            // Remove tray icon
-            RemoveTrayIcon();
+        // Remove tray icon
+        RemoveTrayIcon();
 
-            // Unregister hotkeys
-            m_hotkeyManager.reset();
+        // Unregister hotkeys
+        m_hotkeyManager.reset();
 
-            // Destroy overlay first
-            m_overlayWindow.reset();
+        // Destroy overlay first
+        m_overlayWindow.reset();
 
-            // Clear all modules
-            m_modules.clear();
+        // Clear all modules
+        m_modules.clear();
 
-            // Reset static instance
-            s_instance = nullptr;
+        // Reset static instance
+        s_instance = nullptr;
 
-            LOG_INFO("Nexile shutdown complete");
-        }
-        catch (const std::exception& e) {
-            LOG_ERROR("Error during Nexile shutdown: {}", e.what());
-        }
+        LOG_INFO("Nexile shutdown complete");
     }
 
     void NexileApp::RegisterWindowClass() {
@@ -124,37 +120,31 @@ namespace Nexile {
     }
 
     int NexileApp::Run(int nCmdShow) {
-        try {
-            // Start idle timer thread
-            m_stopIdleTimer = false;
-            m_idleTimerThread = std::thread(&NexileApp::IdleTimerThreadFunc, this);
+        // Start idle timer thread
+        m_stopIdleTimer = false;
+        m_idleTimerThread = std::thread(&NexileApp::IdleTimerThreadFunc, this);
 
-            // Start game detection
-            m_gameDetector->StartDetection([this](GameID gameId) {
-                OnGameChanged(gameId);
-                });
+        // Start game detection
+        m_gameDetector->StartDetection([this](GameID gameId) {
+            OnGameChanged(gameId);
+            });
 
-            LOG_INFO("Nexile running, starting message loop");
+        LOG_INFO("Nexile running, starting message loop");
 
-            // Message loop
-            MSG msg = {};
-            while (GetMessage(&msg, nullptr, 0, 0)) {
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
-
-            // Stop idle timer thread
-            m_stopIdleTimer = true;
-            if (m_idleTimerThread.joinable()) {
-                m_idleTimerThread.join();
-            }
-
-            return (int)msg.wParam;
+        // Message loop
+        MSG msg = {};
+        while (GetMessage(&msg, nullptr, 0, 0)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
         }
-        catch (const std::exception& e) {
-            LOG_ERROR("Error in run loop: {}", e.what());
-            return -1;
+
+        // Stop idle timer thread
+        m_stopIdleTimer = true;
+        if (m_idleTimerThread.joinable()) {
+            m_idleTimerThread.join();
         }
+
+        return (int)msg.wParam;
     }
 
     LRESULT CALLBACK NexileApp::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -192,6 +182,8 @@ namespace Nexile {
             case IDM_SETTINGS:
                 ShowSettingsDialog();
                 return 0;
+            default:
+                break;
             }
             break;
         }
@@ -305,17 +297,74 @@ namespace Nexile {
     void NexileApp::OnHotkeyPressed(int hotkeyId) {
         LOG_DEBUG("Hotkey pressed: {}", hotkeyId);
 
+        // Update activity timestamp
+        UpdateActivityTimestamp();
+
         // Handle core hotkeys
         if (hotkeyId == HotkeyManager::HOTKEY_TOGGLE_OVERLAY) {
             ToggleOverlay();
             return;
         }
+        else if (hotkeyId == HotkeyManager::HOTKEY_GAME_SETTINGS) {
+            // Toggle settings mode
+            m_inSettingsMode = !m_inSettingsMode;
+
+            if (m_inSettingsMode) {
+                // Show settings
+                if (m_overlayWindow) {
+                    auto settingsModule = GetModule("settings");
+                    if (settingsModule) {
+                        m_overlayWindow->LoadModuleUI(settingsModule);
+                        m_overlayWindow->SetClickThrough(false); // Make interactive for settings
+                        SetOverlayVisible(true);
+                    }
+                    else {
+                        LOG_ERROR("Settings module not found");
+                        m_inSettingsMode = false;
+                    }
+                }
+            }
+            else {
+                // Exit settings mode, return to welcome screen
+                if (m_overlayWindow) {
+                    // Restore click-through based on profile
+                    bool clickThrough = m_profileManager ?
+                        m_profileManager->GetCurrentProfile().clickThrough : true;
+                    m_overlayWindow->SetClickThrough(clickThrough);
+
+                    if (m_browserOpen) {
+                        // If browser was open, return to browser
+                        m_overlayWindow->LoadBrowserPage();
+                    }
+                    else {
+                        // Otherwise return to welcome screen
+                        m_overlayWindow->LoadWelcomePage();
+                    }
+                }
+            }
+            return;
+        }
         else if (hotkeyId == HotkeyManager::HOTKEY_BROWSER) {
-            // Show overlay and load browser page
-            if (m_overlayWindow) {
-                m_overlayWindow->SetClickThrough(false); // Make overlay interactive for browser
-                m_overlayWindow->LoadBrowserPage();
-                SetOverlayVisible(true);
+            // Toggle browser mode
+            m_browserOpen = !m_browserOpen;
+
+            if (m_browserOpen) {
+                // Open browser
+                if (m_overlayWindow) {
+                    m_overlayWindow->LoadBrowserPage();
+                    // Browser automatically sets click-through to false
+                    SetOverlayVisible(true);
+                }
+            }
+            else {
+                // Close browser, return to welcome screen
+                if (m_overlayWindow) {
+                    // Restore click-through based on profile
+                    bool clickThrough = m_profileManager ?
+                        m_profileManager->GetCurrentProfile().clickThrough : true;
+                    m_overlayWindow->SetClickThrough(clickThrough);
+                    m_overlayWindow->LoadWelcomePage();
+                }
             }
             return;
         }
@@ -361,61 +410,45 @@ namespace Nexile {
     }
 
     void NexileApp::InitializeModules() {
-        try {
-            // Create and register built-in modules
-            auto priceCheckModule = std::make_shared<PriceCheckModule>();
-            m_modules["price_check"] = priceCheckModule;
+        // Create and register built-in modules
+        auto priceCheckModule = std::make_shared<PriceCheckModule>();
+        m_modules["price_check"] = priceCheckModule;
 
-            // Create settings module
-            auto settingsModule = std::make_shared<SettingsModule>();
-            m_modules["settings"] = settingsModule;
+        // Create settings module
+        auto settingsModule = std::make_shared<SettingsModule>();
+        m_modules["settings"] = settingsModule;
 
-            // Register hotkey for settings and browser
-            if (m_hotkeyManager) {
-                m_hotkeyManager->RegisterHotkey(MOD_ALT | MOD_SHIFT, 'S', HotkeyManager::HOTKEY_GAME_SETTINGS);
-                m_hotkeyManager->RegisterHotkey(MOD_ALT | MOD_SHIFT, 'B', HotkeyManager::HOTKEY_BROWSER);
-            }
-
-            // Scan modules directory for plugin DLLs
-            std::string modulesPath = Utils::CombinePath(Utils::GetModulePath(), "modules");
-            if (Utils::DirectoryExists(modulesPath)) {
-                LoadModulesFromDirectory(modulesPath);
-            }
-
-            // Initialize built-in modules
-            for (auto& [id, module] : m_modules) {
-                if (module) {
-                    module->OnModuleLoad(m_activeGame);
-                }
-            }
-
-            LOG_INFO("Modules initialized: {} modules loaded", m_modules.size());
+        // Register hotkey for settings and browser
+        if (m_hotkeyManager) {
+            m_hotkeyManager->RegisterHotkey(MOD_ALT | MOD_SHIFT, 'S', HotkeyManager::HOTKEY_GAME_SETTINGS);
+            m_hotkeyManager->RegisterHotkey(MOD_ALT | MOD_SHIFT, 'B', HotkeyManager::HOTKEY_BROWSER);
         }
-        catch (const std::exception& e) {
-            LOG_ERROR("Error initializing modules: {}", e.what());
-            throw std::runtime_error(std::string("Failed to initialize modules: ") + e.what());
+
+        // Scan modules directory for plugin DLLs
+        std::string modulesPath = Utils::CombinePath(Utils::GetModulePath(), "modules");
+        if (Utils::DirectoryExists(modulesPath)) {
+            LoadModulesFromDirectory(modulesPath);
         }
+
+        // Initialize built-in modules
+        for (auto& [id, module] : m_modules) {
+            if (module) {
+                module->OnModuleLoad(m_activeGame);
+            }
+        }
+
+        LOG_INFO("Modules initialized: {} modules loaded", m_modules.size());
     }
 
     void NexileApp::LoadModulesFromDirectory(const std::string& directory) {
         LOG_INFO("Scanning for plugin modules in: {}", directory);
 
-        try {
-            std::vector<std::string> dllFiles = Utils::GetFilesInDirectory(directory, ".dll");
+        std::vector<std::string> dllFiles = Utils::GetFilesInDirectory(directory, ".dll");
 
-            for (const auto& dllPath : dllFiles) {
-                try {
-                    if (LoadModuleFromDLL(dllPath)) {
-                        LOG_INFO("Loaded module from: {}", dllPath);
-                    }
-                }
-                catch (const std::exception& e) {
-                    LOG_ERROR("Failed to load module from {}: {}", dllPath, e.what());
-                }
+        for (const auto& dllPath : dllFiles) {
+            if (LoadModuleFromDLL(dllPath)) {
+                LOG_INFO("Loaded module from: {}", dllPath);
             }
-        }
-        catch (const std::exception& e) {
-            LOG_ERROR("Error scanning module directory: {}", e.what());
         }
     }
 
@@ -577,13 +610,6 @@ namespace Nexile {
         if (m_idleTimerStarted) {
             m_idleTimerStarted = false;
             LOG_DEBUG("Activity detected, exiting idle state");
-
-            // Notify modules of wake-up
-            for (auto& [id, module] : m_modules) {
-                if (module && module->IsEnabled()) {
-                    // TODO: Add OnWakeFromIdle method to IModule if needed
-                }
-            }
         }
     }
 
@@ -598,13 +624,6 @@ namespace Nexile {
             if (!m_idleTimerStarted && idleTime > idleThreshold) {
                 m_idleTimerStarted = true;
                 LOG_INFO("Idle timeout reached, entering idle state");
-
-                // Notify modules to save resources
-                for (auto& [id, module] : m_modules) {
-                    if (module && module->IsEnabled()) {
-                        // TODO: Add OnIdle method to IModule if needed
-                    }
-                }
 
                 // If overlay is visible and no game is running, hide it
                 if (m_overlayVisible && m_activeGame == GameID::None) {

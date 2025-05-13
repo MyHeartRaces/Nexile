@@ -140,6 +140,9 @@ namespace Nexile {
         // Settings mode flag
         bool m_inSettingsMode = false;
 
+        // Browser mode flag
+        bool m_browserOpen = false;
+
         // Tray icon data
         NOTIFYICONDATA m_trayIconData = {};
 

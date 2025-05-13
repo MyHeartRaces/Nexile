@@ -38,6 +38,12 @@ namespace Nexile {
         void LoadBrowserPage();
         std::wstring CreateModuleLoaderHTML();
 
+        // New method to center the window on screen
+        void CenterWindow();
+
+        // Get click-through state
+        bool GetClickThrough() const { return m_clickThrough; }
+
     private:
         // ------------- core window plumbing -------------
         static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
