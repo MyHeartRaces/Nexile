@@ -85,17 +85,43 @@ namespace Nexile {
     void OverlayWindow::CenterWindow() {
         if (!m_hwnd) return;
 
-        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        // Get handle to the current foreground window (likely the game window)
+        HWND activeWnd = GetForegroundWindow();
 
+        // If no active window or it's our own window, use primary monitor
+        if (!activeWnd || activeWnd == m_hwnd) {
+            int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+            int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+            RECT rc;
+            GetWindowRect(m_hwnd, &rc);
+            int width = rc.right - rc.left;
+            int height = rc.bottom - rc.top;
+
+            int x = (screenWidth - width) / 2;
+            int y = (screenHeight - height) / 2;
+
+            SetWindowPos(m_hwnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+            return;
+        }
+
+        // Get monitor info for the monitor containing the active window
+        HMONITOR hMon = MonitorFromWindow(activeWnd, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi;
+        mi.cbSize = sizeof(MONITORINFO);
+        GetMonitorInfo(hMon, &mi);
+
+        // Get window dimensions
         RECT rc;
         GetWindowRect(m_hwnd, &rc);
         int width = rc.right - rc.left;
         int height = rc.bottom - rc.top;
 
-        int x = (screenWidth - width) / 2;
-        int y = (screenHeight - height) / 2;
+        // Calculate center position on the same monitor as the active window
+        int x = mi.rcMonitor.left + (mi.rcMonitor.right - mi.rcMonitor.left - width) / 2;
+        int y = mi.rcMonitor.top + (mi.rcMonitor.bottom - mi.rcMonitor.top - height) / 2;
 
+        // Set the position
         SetWindowPos(m_hwnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
@@ -113,7 +139,7 @@ namespace Nexile {
         }
 
         std::wstring runtimeDir = Utils::StringToWideString(
-            Utils::CombinePath(Utils::GetModulePath(), "..\\..\\..\\..\\third_party\\webview2"));
+            Utils::CombinePath(Utils::GetModulePath(), "webview2_runtime"));
 
         bool bundleExists = PathFileExistsW((runtimeDir + L"\\msedgewebview2.exe").c_str());
         if (!bundleExists) {
@@ -340,22 +366,24 @@ namespace Nexile {
 
     <script>
         // Make buttons work by using proper message format
-        document.getElementById('settings-button').addEventListener('click', function() {
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'open_settings'
-            }));
-        });
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('settings-button').addEventListener('click', function() {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'open_settings'
+                }));
+            });
 
-        document.getElementById('browser-button').addEventListener('click', function() {
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'open_browser'
-            }));
-        });
+            document.getElementById('browser-button').addEventListener('click', function() {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'open_browser'
+                }));
+            });
 
-        document.getElementById('close-button').addEventListener('click', function() {
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'toggle_overlay'
-            }));
+            document.getElementById('close-button').addEventListener('click', function() {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'toggle_overlay'
+                }));
+            });
         });
     </script>
 </body>
@@ -382,8 +410,6 @@ namespace Nexile {
         // Turn off click-through for browser
         SetClickThrough(false);
 
-        // Create a browser UI with direct WebView2 navigation and transparent sidebars
-        // Break the large HTML string into smaller parts to avoid compiler limits
         const wchar_t* browserHTML_part1 = LR"(
 <!DOCTYPE html>
 <html lang="en">
@@ -401,8 +427,9 @@ namespace Nexile {
             color: white;
             font-family: 'Segoe UI', Arial, sans-serif;
             overflow: hidden;
-        }
+        })";
 
+        const wchar_t* browserHTML_part2 = LR"(
         .browser-container {
             display: flex;
             flex-direction: column;
@@ -422,7 +449,7 @@ namespace Nexile {
             width: 100%;
         })";
 
-        const wchar_t* browserHTML_part2 = LR"(
+        const wchar_t* browserHTML_part3 = LR"(
         .address-input {
             flex-grow: 1;
             padding: 8px 12px;
@@ -437,8 +464,9 @@ namespace Nexile {
         .address-input:focus {
             outline: none;
             background-color: rgba(70, 70, 70, 1.0);
-        }
+        })";
 
+        const wchar_t* browserHTML_part4 = LR"(
         .navigation-buttons {
             display: flex;
             gap: 5px;
@@ -456,8 +484,9 @@ namespace Nexile {
 
         .nav-button:hover {
             background-color: #3a80d2;
-        }
+        })";
 
+        const wchar_t* browserHTML_part5 = LR"(
         .bookmarks {
             display: flex;
             gap: 10px;
@@ -468,9 +497,8 @@ namespace Nexile {
             overflow-x: auto;
             white-space: nowrap;
             width: 100%;
-        })";
+        }
 
-        const wchar_t* browserHTML_part3 = LR"(
         .bookmark {
             background-color: #333;
             color: #ddd;
@@ -478,8 +506,9 @@ namespace Nexile {
             border-radius: 3px;
             cursor: pointer;
             font-size: 13px;
-        }
+        })";
 
+        const wchar_t* browserHTML_part6 = LR"(
         .bookmark:hover {
             background-color: #444;
         }
@@ -493,6 +522,15 @@ namespace Nexile {
             overflow: hidden;
         }
 
+        .browser-content {
+            flex-grow: 1;
+            width: 100%;
+            height: calc(100vh - 130px);
+            border: none;
+            border-radius: 5px;
+        })";
+
+        const wchar_t* browserHTML_part7 = LR"(
         .status-bar {
             padding: 8px;
             background-color: rgba(40, 40, 40, 1.0);
@@ -516,7 +554,7 @@ namespace Nexile {
             </div>
         </div>)";
 
-        const wchar_t* browserHTML_part4 = LR"(
+        const wchar_t* browserHTML_part8 = LR"(
         <div class="bookmarks">
             <div class="bookmark" data-url="https://www.google.com">Google</div>
             <div class="bookmark" data-url="https://www.reddit.com/r/pathofexile">PoE Reddit</div>
@@ -525,14 +563,12 @@ namespace Nexile {
             <div class="bookmark" data-url="https://www.poedb.tw">PoeDB</div>
         </div>
 
-        <div class="webview-frame" id="webviewFrame">
-            <!-- This is where the WebView2 will populate content -->
-        </div>
+        <iframe id="browserFrame" class="browser-content" src="about:blank"></iframe>
 
         <div class="status-bar" id="statusBar">Ready</div>
     </div>)";
 
-        const wchar_t* browserHTML_part5 = LR"(
+        const wchar_t* browserHTML_part9 = LR"(
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const urlInput = document.getElementById('urlInput');
@@ -541,8 +577,10 @@ namespace Nexile {
             const homeButton = document.getElementById('homeButton');
             const closeButton = document.getElementById('closeButton');
             const statusBar = document.getElementById('statusBar');
-            const bookmarks = document.querySelectorAll('.bookmark');
+            const browserFrame = document.getElementById('browserFrame');
+            const bookmarks = document.querySelectorAll('.bookmark');)";
 
+        const wchar_t* browserHTML_part10 = LR"(
             // Function to navigate to a URL
             function navigateToUrl(url) {
                 if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -550,12 +588,8 @@ namespace Nexile {
                 }
                 
                 try {
-                    // Send navigation request to the native app
-                    window.chrome.webview.postMessage(JSON.stringify({
-                        action: 'navigate_to',
-                        url: url
-                    }));
-                    
+                    // Update iframe source
+                    browserFrame.src = url;
                     urlInput.value = url;
                     statusBar.textContent = 'Loading: ' + url;
                 } catch (error) {
@@ -563,7 +597,7 @@ namespace Nexile {
                 }
             })";
 
-        const wchar_t* browserHTML_part6 = LR"(
+        const wchar_t* browserHTML_part11 = LR"(
             // Handle Go button and Enter key
             goButton.addEventListener('click', function() {
                 if (urlInput.value.trim()) {
@@ -575,28 +609,31 @@ namespace Nexile {
                 if (e.key === 'Enter' && urlInput.value.trim()) {
                     navigateToUrl(urlInput.value.trim());
                 }
-            });
+            });)";
 
+        const wchar_t* browserHTML_part12 = LR"(
             // Handle back button
             backButton.addEventListener('click', function() {
-                window.chrome.webview.postMessage(JSON.stringify({
-                    action: 'go_back'
-                }));
+                try {
+                    browserFrame.contentWindow.history.back();
+                } catch (e) {
+                    statusBar.textContent = 'Cannot go back: ' + e.message;
+                }
             });
 
             // Handle home button
             homeButton.addEventListener('click', function() {
                 navigateToUrl('https://www.google.com');
-            });
+            });)";
 
+        const wchar_t* browserHTML_part13 = LR"(
             // Handle close button
             closeButton.addEventListener('click', function() {
                 window.chrome.webview.postMessage(JSON.stringify({
                     action: 'close_browser'
                 }));
-            });)";
+            });
 
-        const wchar_t* browserHTML_part7 = LR"(
             // Handle bookmark clicks
             bookmarks.forEach(bookmark => {
                 bookmark.addEventListener('click', function() {
@@ -605,14 +642,17 @@ namespace Nexile {
                         navigateToUrl(url);
                     }
                 });
-            });
+            });)";
 
-            // Listen for messages from WebView2
-            window.chrome.webview.addEventListener('message', function(event) {
-                const message = JSON.parse(event.data);
-                if (message.action === 'navigate_complete') {
-                    statusBar.textContent = 'Loaded: ' + message.url;
-                    urlInput.value = message.url;
+        const wchar_t* browserHTML_part14 = LR"(
+            // Handle iframe load events
+            browserFrame.addEventListener('load', function() {
+                try {
+                    statusBar.textContent = 'Loaded: ' + browserFrame.contentWindow.location.href;
+                    urlInput.value = browserFrame.contentWindow.location.href;
+                } catch (e) {
+                    // Catch cross-origin errors
+                    statusBar.textContent = 'Loaded: ' + urlInput.value;
                 }
             });
 
@@ -624,22 +664,26 @@ namespace Nexile {
         });
     </script>
 </body>
-</html>
-)";
+</html>)";
 
-        // Concatenate all HTML parts
-        std::wstring fullHTML = std::wstring(browserHTML_part1) +
+        // Concatenate browser HTML parts
+        std::wstring browserHTML = std::wstring(browserHTML_part1) +
             std::wstring(browserHTML_part2) +
             std::wstring(browserHTML_part3) +
             std::wstring(browserHTML_part4) +
             std::wstring(browserHTML_part5) +
             std::wstring(browserHTML_part6) +
-            std::wstring(browserHTML_part7);
+            std::wstring(browserHTML_part7) +
+            std::wstring(browserHTML_part8) +
+            std::wstring(browserHTML_part9) +
+            std::wstring(browserHTML_part10) +
+            std::wstring(browserHTML_part11) +
+            std::wstring(browserHTML_part12) +
+            std::wstring(browserHTML_part13) +
+            std::wstring(browserHTML_part14);
 
-        // First, navigate to the browser shell
-        m_webView->NavigateToString(fullHTML.c_str());
-
-        // This will be followed by actual navigation when the user clicks on something
+        // Set the browser HTML
+        m_webView->NavigateToString(browserHTML.c_str());
         LOG_INFO("Browser page loaded");
     }
 
@@ -728,7 +772,17 @@ namespace Nexile {
                     &m_navigationCompletedToken);
 
         m_webView->AddScriptToExecuteOnDocumentCreated(
-            L"window.chrome.webview.addEventListener('message', e=>window.postMessage(e.data,'*'));", nullptr);
+            L"window.chrome = window.chrome || {}; window.chrome.webview = { postMessage: function(data) { window.external.notify(data); } };"
+            L"window.addEventListener('message', function(e) { if(e.data && typeof e.data === 'string') try { window.chrome.webview.postMessage(e.data); } catch(ex) {} });", nullptr);
+
+        // Add event handler for external.notify
+        Microsoft::WRL::ComPtr<ICoreWebView2Settings> settings;
+        if (SUCCEEDED(m_webView->get_Settings(&settings))) {
+            settings->put_IsScriptEnabled(TRUE);
+            settings->put_AreDefaultScriptDialogsEnabled(TRUE);
+            settings->put_IsWebMessageEnabled(TRUE);
+        }
+
 #ifdef _DEBUG
         m_webView->OpenDevToolsWindow();
 #endif
@@ -810,6 +864,7 @@ namespace Nexile {
 
         m_visible = true;
 
+        // Ensure the window appears on the same monitor as the active game
         CenterWindow();
 
         ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
@@ -838,14 +893,31 @@ namespace Nexile {
             return;
         }
 
+        // Get the monitor containing the target rect
+        HMONITOR hMon = MonitorFromRect(&rect, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi;
+        mi.cbSize = sizeof(MONITORINFO);
+        GetMonitorInfo(hMon, &mi);
+
+        // Ensure the window stays within this monitor's bounds
+        RECT adjustedRect = rect;
+        if (adjustedRect.right > mi.rcMonitor.right)
+            adjustedRect.right = mi.rcMonitor.right;
+        if (adjustedRect.bottom > mi.rcMonitor.bottom)
+            adjustedRect.bottom = mi.rcMonitor.bottom;
+        if (adjustedRect.left < mi.rcMonitor.left)
+            adjustedRect.left = mi.rcMonitor.left;
+        if (adjustedRect.top < mi.rcMonitor.top)
+            adjustedRect.top = mi.rcMonitor.top;
+
         SetWindowPos(
             m_hwnd, HWND_TOPMOST,
-            rect.left, rect.top,
-            rect.right - rect.left,
-            rect.bottom - rect.top,
+            adjustedRect.left, adjustedRect.top,
+            adjustedRect.right - adjustedRect.left,
+            adjustedRect.bottom - adjustedRect.top,
             SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
-        m_webViewController->put_Bounds({ 0,0, rect.right - rect.left, rect.bottom - rect.top });
+        m_webViewController->put_Bounds({ 0,0, adjustedRect.right - adjustedRect.left, adjustedRect.bottom - adjustedRect.top });
     }
 
     void OverlayWindow::Navigate(const std::wstring& uri) {
@@ -924,8 +996,9 @@ namespace Nexile {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-        }
+        })";
 
+            const wchar_t* settingsHTML_part2 = LR"(
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: var(--text-color);
@@ -949,8 +1022,9 @@ namespace Nexile {
         h2 {
             color: var(--primary-color);
             margin: 25px 0 15px 0;
-        }
+        })";
 
+            const wchar_t* settingsHTML_part3 = LR"(
         .settings-section {
             background-color: var(--secondary-bg);
             border-radius: 8px;
@@ -976,7 +1050,7 @@ namespace Nexile {
             min-width: 150px;
         })";
 
-            const wchar_t* settingsHTML_part2 = LR"(
+            const wchar_t* settingsHTML_part4 = LR"(
         /* Checkbox styling */
         .checkbox-container {
             display: block;
@@ -1004,8 +1078,9 @@ namespace Nexile {
             width: 25px;
             background-color: #333;
             border-radius: 4px;
-        }
+        })";
 
+            const wchar_t* settingsHTML_part5 = LR"(
         .checkbox-container:hover input ~ .checkmark {
             background-color: #444;
         }
@@ -1032,8 +1107,9 @@ namespace Nexile {
             border: solid white;
             border-width: 0 3px 3px 0;
             transform: rotate(45deg);
-        }
+        })";
 
+            const wchar_t* settingsHTML_part6 = LR"(
         /* Slider styling */
         .slider-container {
             width: 100%;
@@ -1046,9 +1122,8 @@ namespace Nexile {
             border-radius: 5px;
             background: #333;
             outline: none;
-        })";
+        }
 
-            const wchar_t* settingsHTML_part3 = LR"(
             .slider::-webkit-slider-thumb {
                 -webkit-appearance: none;
                 appearance: none;
@@ -1057,8 +1132,9 @@ namespace Nexile {
                 border-radius: 50%;
                 background: var(--primary-color);
                 cursor: pointer;
-            }
+            })";
 
+            const wchar_t* settingsHTML_part7 = LR"(
             .slider::-moz-range-thumb {
                 width: 20px;
                 height: 20px;
@@ -1082,8 +1158,9 @@ namespace Nexile {
             min-width: 100px;
             text-align: center;
             margin-right: 10px;
-        }
+        })";
 
+            const wchar_t* settingsHTML_part8 = LR"(
         .button {
             display: inline-block;
             background-color: var(--primary-color);
@@ -1108,8 +1185,9 @@ namespace Nexile {
             display: flex;
             justify-content: flex-end;
             margin-top: 20px;
-        }
+        })";
 
+            const wchar_t* settingsHTML_part9 = LR"(
             .buttons-container button {
                 margin-left: 10px;
             }
@@ -1128,7 +1206,7 @@ namespace Nexile {
     </style>
 </head>)";
 
-            const wchar_t* settingsHTML_part4 = LR"(
+            const wchar_t* settingsHTML_part10 = LR"(
 <body>
     <div class="settings-container">
         <h1>Nexile Settings</h1>
@@ -1144,8 +1222,9 @@ namespace Nexile {
                     </div>
                     <span class="slider-value" id="opacity-value">80%</span>
                 </div>
-            </div>
+            </div>)";
 
+            const wchar_t* settingsHTML_part11 = LR"(
             <div class="setting-item">
                 <span class="setting-label">Click-through Overlay</span>
                 <div class="setting-control">
@@ -1164,8 +1243,9 @@ namespace Nexile {
                         <span class="checkmark"></span>
                     </label>
                 </div>
-            </div>
+            </div>)";
 
+            const wchar_t* settingsHTML_part12 = LR"(
             <div class="setting-item">
                 <span class="setting-label">Auto-detect Games</span>
                 <div class="setting-control">
@@ -1175,9 +1255,8 @@ namespace Nexile {
                     </label>
                 </div>
             </div>
-        </div>)";
+        </div>
 
-            const wchar_t* settingsHTML_part5 = LR"(
         <div class="settings-section">
             <h2>Hotkey Settings</h2>
 
@@ -1187,8 +1266,9 @@ namespace Nexile {
                     <span class="hotkey-display" id="toggle-overlay-hotkey">Alt+Shift+O</span>
                     <button class="button button-small" id="toggle-overlay-button">Change</button>
                 </div>
-            </div>
+            </div>)";
 
+            const wchar_t* settingsHTML_part13 = LR"(
             <div class="setting-item">
                 <span class="setting-label">Open Settings</span>
                 <div class="setting-control">
@@ -1204,8 +1284,9 @@ namespace Nexile {
                     <button class="button button-small" id="browser-button">Change</button>
                 </div>
             </div>
-        </div>
+        </div>)";
 
+            const wchar_t* settingsHTML_part14 = LR"(
         <div class="buttons-container">
             <button class="button" id="defaults-button">Reset to Defaults</button>
             <button class="button" id="cancel-button">Cancel</button>
@@ -1213,7 +1294,7 @@ namespace Nexile {
         </div>
     </div>)";
 
-            const wchar_t* settingsHTML_part6 = LR"(
+            const wchar_t* settingsHTML_part15 = LR"(
     <script>
         // Initialize UI
         document.addEventListener('DOMContentLoaded', function () {
@@ -1223,8 +1304,9 @@ namespace Nexile {
 
             opacitySlider.addEventListener('input', function () {
                 opacityValue.textContent = this.value + '%';
-            });
+            });)";
 
+            const wchar_t* settingsHTML_part16 = LR"(
             // Setup buttons
             document.getElementById('save-button').addEventListener('click', function() {
                 const settings = {
@@ -1240,8 +1322,9 @@ namespace Nexile {
                     action: 'save_settings',
                     settings: settings
                 }));
-            });
+            });)";
 
+            const wchar_t* settingsHTML_part17 = LR"(
             document.getElementById('cancel-button').addEventListener('click', function() {
                 window.chrome.webview.postMessage(JSON.stringify({
                     action: 'cancel_settings'
@@ -1255,14 +1338,18 @@ namespace Nexile {
             });
 
             // Request current settings
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'get_settings'
-            }));
+            setTimeout(function() {
+                window.chrome.webview.postMessage(JSON.stringify({
+                    action: 'get_settings'
+                }));
+            }, 500);)";
 
+            const wchar_t* settingsHTML_part18 = LR"(
             // Listen for settings from C++ host
-            window.chrome.webview.addEventListener('message', function(event) {
+            window.addEventListener('message', function(event) {
                 try {
-                    const message = JSON.parse(event.data);
+                    const data = event.data;
+                    const message = typeof data === 'string' ? JSON.parse(data) : data;
                     
                     if (message.action === 'load_settings') {
                         const settings = message.settings;
@@ -1272,8 +1359,9 @@ namespace Nexile {
                             if (settings.general.opacity !== undefined) {
                                 document.getElementById('opacity-slider').value = settings.general.opacity;
                                 document.getElementById('opacity-value').textContent = settings.general.opacity + '%';
-                            }
-                            
+                            })";
+
+            const wchar_t* settingsHTML_part19 = LR"(                            
                             if (settings.general.clickThrough !== undefined) {
                                 document.getElementById('click-through-checkbox').checked = settings.general.clickThrough;
                             }
@@ -1285,8 +1373,9 @@ namespace Nexile {
                             if (settings.general.autodetect !== undefined) {
                                 document.getElementById('autodetect-checkbox').checked = settings.general.autodetect;
                             }
-                        }
-                        
+                        })";
+
+            const wchar_t* settingsHTML_part20 = LR"(                        
                         // Update hotkeys
                         if (settings.hotkeys) {
                             if (settings.hotkeys['1000']) {
@@ -1309,8 +1398,7 @@ namespace Nexile {
         });
     </script>
 </body>
-</html>
-)";
+</html>)";
 
             // Concatenate all HTML parts
             std::wstring fullHTML = std::wstring(settingsHTML_part1) +
@@ -1318,7 +1406,21 @@ namespace Nexile {
                 std::wstring(settingsHTML_part3) +
                 std::wstring(settingsHTML_part4) +
                 std::wstring(settingsHTML_part5) +
-                std::wstring(settingsHTML_part6);
+                std::wstring(settingsHTML_part6) +
+                std::wstring(settingsHTML_part7) +
+                std::wstring(settingsHTML_part8) +
+                std::wstring(settingsHTML_part9) +
+                std::wstring(settingsHTML_part10) +
+                std::wstring(settingsHTML_part11) +
+                std::wstring(settingsHTML_part12) +
+                std::wstring(settingsHTML_part13) +
+                std::wstring(settingsHTML_part14) +
+                std::wstring(settingsHTML_part15) +
+                std::wstring(settingsHTML_part16) +
+                std::wstring(settingsHTML_part17) +
+                std::wstring(settingsHTML_part18) +
+                std::wstring(settingsHTML_part19) +
+                std::wstring(settingsHTML_part20);
 
             m_webView->NavigateToString(fullHTML.c_str());
             return;
