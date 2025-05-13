@@ -1321,8 +1321,6 @@ namespace Nexile {
                 std::wstring(settingsHTML_part6);
 
             m_webView->NavigateToString(fullHTML.c_str());
-
-            m_webView->NavigateToString(settingsHTML);
             return;
         }
 
