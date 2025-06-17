@@ -191,9 +191,9 @@
             font-size: 14px;
         }
 
-            .price-check-button:hover {
-                background-color: #2a70c2;
-            }
+        .price-check-button:hover {
+            background-color: #2a70c2;
+        }
 
         /* Hotkey hint */
         .hotkey-hint {
@@ -207,239 +207,283 @@
     </style>
 </head>
 <body>
-    <div class="price-check-container" id="price-check-container">
-        <div class="price-check-status" id="price-check-status">
-            Hover over an item and press <span class="hotkey-hint">Alt+D</span> to check price
+<div class="price-check-container" id="price-check-container">
+    <div class="price-check-status" id="price-check-status">
+        Hover over an item and press <span class="hotkey-hint">Alt+P</span> to check price
+    </div>
+
+    <div class="price-check-result" id="price-check-result">
+        <div class="item-header" id="item-header">
+            <div class="item-name" id="item-name">Item Name</div>
+            <div class="item-base" id="item-base">Item Base</div>
         </div>
 
-        <div class="price-check-result" id="price-check-result">
-            <div class="item-header" id="item-header">
-                <div class="item-name" id="item-name">Item Name</div>
-                <div class="item-base" id="item-base">Item Base</div>
-            </div>
-
-            <div class="item-details" id="item-details">
-                <!-- Item properties will be added here -->
-            </div>
-
-            <div class="price-info" id="price-info">
-                <!-- Price information will be added here -->
-            </div>
-
-            <div class="price-check-controls">
-                <button class="price-check-button" id="copy-whisper-button">Copy Whisper</button>
-                <button class="price-check-button" id="check-again-button">Check Again</button>
-            </div>
+        <div class="item-details" id="item-details">
+            <!-- Item properties will be added here -->
         </div>
 
-        <div class="price-check-loading" id="price-check-loading">
-            <div class="loader"></div>
-            <p>Checking price...</p>
+        <div class="price-info" id="price-info">
+            <!-- Price information will be added here -->
         </div>
 
-        <div class="price-check-error" id="price-check-error">
-            Error checking price. Please try again.
+        <div class="price-check-controls">
+            <button class="price-check-button" id="copy-whisper-button">Copy Whisper</button>
+            <button class="price-check-button" id="check-again-button">Check Again</button>
         </div>
     </div>
 
-    <script>// Initialize price check module
-        document.addEventListener('DOMContentLoaded', function() {
-            // Get elements
-            const container = document.getElementById('price-check-container');
-            const status = document.getElementById('price-check-status');
-            const result = document.getElementById('price-check-result');
-            const itemHeader = document.getElementById('item-header');
-            const itemName = document.getElementById('item-name');
-            const itemBase = document.getElementById('item-base');
-            const itemDetails = document.getElementById('item-details');
-            const priceInfo = document.getElementById('price-info');
-            const loading = document.getElementById('price-check-loading');
-            const error = document.getElementById('price-check-error');
-            const copyWhisperButton = document.getElementById('copy-whisper-button');
-            const checkAgainButton = document.getElementById('check-again-button');
+    <div class="price-check-loading" id="price-check-loading">
+        <div class="loader"></div>
+        <p>Checking price...</p>
+    </div>
 
-            // Set up event listeners
+    <div class="price-check-error" id="price-check-error">
+        Error checking price. Please try again.
+    </div>
+</div>
+
+<script>
+    // CEF JavaScript Bridge
+    function sendMessage(data) {
+        if (window.nexile && window.nexile.postMessage) {
+            window.nexile.postMessage(data);
+        } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+            // Fallback for compatibility
+            window.chrome.webview.postMessage(JSON.stringify(data));
+        } else {
+            console.error('No message bridge available');
+        }
+    }
+
+    // Initialize price check module
+    function initializePriceCheck() {
+        // Get elements
+        const container = document.getElementById('price-check-container');
+        const status = document.getElementById('price-check-status');
+        const result = document.getElementById('price-check-result');
+        const itemHeader = document.getElementById('item-header');
+        const itemName = document.getElementById('item-name');
+        const itemBase = document.getElementById('item-base');
+        const itemDetails = document.getElementById('item-details');
+        const priceInfo = document.getElementById('price-info');
+        const loading = document.getElementById('price-check-loading');
+        const error = document.getElementById('price-check-error');
+        const copyWhisperButton = document.getElementById('copy-whisper-button');
+        const checkAgainButton = document.getElementById('check-again-button');
+
+        // Set up event listeners
+        if (copyWhisperButton) {
             copyWhisperButton.addEventListener('click', function() {
                 if (window.currentItemData && window.currentItemData.whisper) {
                     // Send message to native code to copy whisper
-                    sendToNative({
+                    sendMessage({
                         action: 'copy_whisper',
                         whisper: window.currentItemData.whisper
                     });
                 }
             });
+        }
 
+        if (checkAgainButton) {
             checkAgainButton.addEventListener('click', function() {
                 // Send message to native code to check price again
-                sendToNative({
+                sendMessage({
                     action: 'check_price_again'
                 });
 
                 // Show loading
                 showLoading();
             });
+        }
 
-            // Listen for messages
-            window.addEventListener('message', function(event) {
-                const message = event.data;
-                if (message && message.module === 'price_check') {
-                    updatePriceCheck(message.data);
-                }
-            });
+        // Function to update price check UI
+        window.updatePriceCheck = function(data) {
+            try {
+                const itemData = typeof data === 'string' ? JSON.parse(data) : data;
 
-            // Function to update price check UI
-            window.updatePriceCheck = function(data) {
-                try {
-                    const itemData = typeof data === 'string' ? JSON.parse(data) : data;
+                // Save current item data
+                window.currentItemData = itemData;
 
-                    // Save current item data
-                    window.currentItemData = itemData;
+                // Reset UI
+                if (status) status.style.display = 'none';
+                if (result) result.style.display = 'none';
+                if (loading) loading.style.display = 'none';
+                if (error) error.style.display = 'none';
 
-                    // Reset UI
-                    status.style.display = 'none';
-                    result.style.display = 'none';
-                    loading.style.display = 'none';
-                    error.style.display = 'none';
-
-                    // Handle error
-                    if (itemData.error) {
+                // Handle error
+                if (itemData.error) {
+                    if (error) {
                         error.textContent = itemData.error;
                         error.style.display = 'block';
-                        return;
                     }
+                    return;
+                }
 
-                    // Handle loading
-                    if (itemData.loading) {
-                        loading.style.display = 'block';
-                        return;
-                    }
+                // Handle loading
+                if (itemData.loading) {
+                    if (loading) loading.style.display = 'block';
+                    return;
+                }
 
-                    // Clear existing data
-                    itemDetails.innerHTML = '';
-                    priceInfo.innerHTML = '';
+                // Clear existing data
+                if (itemDetails) itemDetails.innerHTML = '';
+                if (priceInfo) priceInfo.innerHTML = '';
 
-                    // Set item name and base
-                    itemName.textContent = itemData.name || 'Unknown Item';
-                    itemBase.textContent = itemData.baseType || '';
+                // Set item name and base
+                if (itemName) itemName.textContent = itemData.name || 'Unknown Item';
+                if (itemBase) itemBase.textContent = itemData.baseType || '';
 
-                    // Set item rarity class
+                // Set item rarity class
+                if (itemHeader) {
                     itemHeader.className = 'item-header';
                     if (itemData.rarity) {
                         itemHeader.classList.add('rarity-' + itemData.rarity.toLowerCase());
                     }
+                }
 
-                    // Add details
-                    let detailsHTML = '';
+                // Add details
+                let detailsHTML = '';
 
-                    if (itemData.rarity) {
-                        detailsHTML += createPropertyHTML('Rarity', itemData.rarity);
+                if (itemData.rarity) {
+                    detailsHTML += createPropertyHTML('Rarity', itemData.rarity);
+                }
+
+                if (itemData.itemLevel) {
+                    detailsHTML += createPropertyHTML('Item Level', itemData.itemLevel);
+                }
+
+                if (itemData.quality) {
+                    detailsHTML += createPropertyHTML('Quality', itemData.quality + '%');
+                }
+
+                if (itemData.links && itemData.links > 0) {
+                    detailsHTML += createPropertyHTML('Links', itemData.links);
+                }
+
+                if (itemData.corrupted) {
+                    detailsHTML += createPropertyHTML('Corrupted', 'Yes');
+                }
+
+                if (itemData.identified === false) {
+                    detailsHTML += createPropertyHTML('Identified', 'No');
+                }
+
+                // Add mods
+                if (itemData.mods && itemData.mods.length > 0) {
+                    detailsHTML += '<div class="item-mods">';
+                    for (const mod of itemData.mods) {
+                        detailsHTML += `<div>${mod}</div>`;
                     }
+                    detailsHTML += '</div>';
+                }
 
-                    if (itemData.itemLevel) {
-                        detailsHTML += createPropertyHTML('Item Level', itemData.itemLevel);
-                    }
+                if (itemDetails) itemDetails.innerHTML = detailsHTML;
 
-                    if (itemData.quality) {
-                        detailsHTML += createPropertyHTML('Quality', itemData.quality + '%');
-                    }
+                // Display price information
+                let priceHTML = '';
 
-                    if (itemData.links && itemData.links > 0) {
-                        detailsHTML += createPropertyHTML('Links', itemData.links);
-                    }
+                if (itemData.price) {
+                    priceHTML += `<div class="price-value">${itemData.price}</div>`;
+                } else {
+                    priceHTML += `<div class="price-value">No price data available</div>`;
+                }
 
-                    if (itemData.corrupted) {
-                        detailsHTML += createPropertyHTML('Corrupted', 'Yes');
-                    }
+                if (itemData.confidence) {
+                    priceHTML += createPriceDetailHTML('Confidence', itemData.confidence);
+                }
 
-                    if (itemData.identified === false) {
-                        detailsHTML += createPropertyHTML('Identified', 'No');
-                    }
+                if (itemData.listings && itemData.listings > 0) {
+                    priceHTML += createPriceDetailHTML('Listings', itemData.listings);
+                }
 
-                    // Add mods
-                    if (itemData.mods && itemData.mods.length > 0) {
-                        detailsHTML += '<div class="item-mods">';
-                        for (const mod of itemData.mods) {
-                            detailsHTML += `<div>${mod}</div>`;
-                        }
-                        detailsHTML += '</div>';
-                    }
+                if (itemData.source) {
+                    priceHTML += createPriceDetailHTML('Source', itemData.source);
+                }
 
-                    itemDetails.innerHTML = detailsHTML;
+                if (itemData.date) {
+                    priceHTML += createPriceDetailHTML('Date', itemData.date);
+                }
 
-                    // Display price information
-                    let priceHTML = '';
+                if (priceInfo) priceInfo.innerHTML = priceHTML;
 
-                    if (itemData.price) {
-                        priceHTML += `<div class="price-value">${itemData.price}</div>`;
-                    } else {
-                        priceHTML += `<div class="price-value">No price data available</div>`;
-                    }
+                // Show result
+                if (result) result.style.display = 'block';
 
-                    if (itemData.confidence) {
-                        priceHTML += createPriceDetailHTML('Confidence', itemData.confidence);
-                    }
-
-                    if (itemData.listings && itemData.listings > 0) {
-                        priceHTML += createPriceDetailHTML('Listings', itemData.listings);
-                    }
-
-                    if (itemData.source) {
-                        priceHTML += createPriceDetailHTML('Source', itemData.source);
-                    }
-
-                    if (itemData.date) {
-                        priceHTML += createPriceDetailHTML('Date', itemData.date);
-                    }
-
-                    priceInfo.innerHTML = priceHTML;
-
-                    // Show result
-                    result.style.display = 'block';
-
-                    // Handle whisper button visibility
+                // Handle whisper button visibility
+                if (copyWhisperButton) {
                     copyWhisperButton.style.display = itemData.whisper ? 'block' : 'none';
+                }
 
-                } catch (e) {
-                    console.error('Error parsing price data:', e);
+            } catch (e) {
+                console.error('Error parsing price data:', e);
+                if (error) {
                     error.textContent = 'Error processing item data';
                     error.style.display = 'block';
                 }
-            };
+            }
+        };
 
-            // Helper to create property HTML
-            function createPropertyHTML(name, value) {
-                return `
+        // Helper to create property HTML
+        function createPropertyHTML(name, value) {
+            return `
                     <div class="item-property">
                         <span class="item-property-name">${name}:</span>
                         <span class="item-property-value">${value}</span>
                     </div>
                 `;
-            }
+        }
 
-            // Helper to create price detail HTML
-            function createPriceDetailHTML(name, value) {
-                return `
+        // Helper to create price detail HTML
+        function createPriceDetailHTML(name, value) {
+            return `
                     <div class="price-detail">
                         <span class="price-detail-name">${name}:</span>
                         <span class="price-detail-value">${value}</span>
                     </div>
                 `;
-            }
+        }
 
-            // Show loading state
-            function showLoading() {
-                status.style.display = 'none';
-                result.style.display = 'none';
-                loading.style.display = 'block';
-                error.style.display = 'none';
-            }
+        // Show loading state
+        function showLoading() {
+            if (status) status.style.display = 'none';
+            if (result) result.style.display = 'none';
+            if (loading) loading.style.display = 'block';
+            if (error) error.style.display = 'none';
+        }
 
-            // Send message to native code
-            function sendToNative(message) {
-                if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage(JSON.stringify(message));
-                }
+        console.log('Price check module initialized with CEF bridge');
+    }
+
+    // Listen for messages from C++ (CEF)
+    window.addEventListener('message', function(event) {
+        try {
+            const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            if (message && message.module === 'price_check') {
+                window.updatePriceCheck(message.data);
             }
-        });</script>
+        } catch (e) {
+            console.error('Error processing price check message:', e);
+        }
+    });
+
+    // Expose global function for C++ to call directly
+    window.handleNexileMessage = function(messageData) {
+        try {
+            const message = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
+            if (message && message.module === 'price_check') {
+                window.updatePriceCheck(message.data);
+            }
+        } catch (e) {
+            console.error('Error handling Nexile price check message:', e);
+        }
+    };
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializePriceCheck);
+    } else {
+        initializePriceCheck();
+    }
+</script>
 </body>
 </html>

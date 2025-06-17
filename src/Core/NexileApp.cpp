@@ -10,6 +10,12 @@
 #include "../Utils/Utils.h"
 #include "../Utils/Logger.h"
 
+// CEF includes
+#include <include/cef_app.h>
+#include <include/cef_browser.h>
+#include <include/cef_command_line.h>
+#include <include/wrapper/cef_helpers.h>
+
 namespace Nexile {
 
     // Initialize static instance
@@ -20,14 +26,26 @@ namespace Nexile {
         // Store instance for window procedure
         s_instance = this;
 
-        // Initialize application window
+        // Initialize logging first
+        Logger::GetInstance().SetLogToConsole(true);
+        Logger::GetInstance().SetLogToFile(true, Utils::CombinePath(Utils::GetAppDataPath(), "nexile.log"));
+        LOG_INFO("Starting Nexile application with CEF");
+
+        // Initialize application window (hidden main window for message processing)
         InitializeWindow();
 
         // Create managers and components
         m_profileManager = std::make_unique<ProfileManager>();
         m_hotkeyManager = std::make_unique<HotkeyManager>(this);
         m_gameDetector = std::make_unique<GameDetector>();
-        m_overlayWindow = std::make_unique<OverlayWindow>(this);
+
+        // Initialize the overlay window (this will initialize CEF)
+        try {
+            m_overlayWindow = std::make_unique<OverlayWindow>(this);
+        } catch (const std::exception& e) {
+            LOG_ERROR("Failed to initialize overlay window: {}", e.what());
+            throw;
+        }
 
         // Set overlay window in profile manager
         m_profileManager->SetOverlayWindow(m_overlayWindow.get());
@@ -51,17 +69,19 @@ namespace Nexile {
         m_lastActivityTime = std::chrono::steady_clock::now();
         m_idleTimerStarted = false;
 
-        LOG_INFO("Nexile initialized successfully");
+        LOG_INFO("Nexile initialized successfully with CEF");
     }
 
     NexileApp::~NexileApp() {
+        LOG_INFO("Starting Nexile shutdown");
+
         // Remove tray icon
         RemoveTrayIcon();
 
         // Unregister hotkeys
         m_hotkeyManager.reset();
 
-        // Destroy overlay first
+        // Destroy overlay first (this will shutdown CEF)
         m_overlayWindow.reset();
 
         // Clear all modules
@@ -127,15 +147,27 @@ namespace Nexile {
         // Start game detection
         m_gameDetector->StartDetection([this](GameID gameId) {
             OnGameChanged(gameId);
-            });
+        });
 
-        LOG_INFO("Nexile running, starting message loop");
+        LOG_INFO("Nexile running, starting message loop with CEF work");
 
-        // Message loop
+        // Message loop with CEF work
         MSG msg = {};
-        while (GetMessage(&msg, nullptr, 0, 0)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+        while (true) {
+            // Process CEF work
+            CefDoMessageLoopWork();
+
+            // Process Windows messages
+            if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_QUIT) {
+                    break;
+                }
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+
+            // Small sleep to prevent high CPU usage
+            Sleep(1);
         }
 
         // Stop idle timer thread

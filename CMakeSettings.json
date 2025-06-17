@@ -13,7 +13,12 @@
       "variables": [
         {
           "name": "CMAKE_CXX_FLAGS",
-          "value": "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /I\"${projectDir}\\src\"",
+          "value": "/DWIN32 /D_WINDOWS /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /W3 /GR /EHsc /I\"${projectDir}\\src\"",
+          "type": "STRING"
+        },
+        {
+          "name": "CEF_ROOT",
+          "value": "${projectDir}\\third_party\\cef",
           "type": "STRING"
         }
       ]
@@ -31,7 +36,12 @@
       "variables": [
         {
           "name": "CMAKE_CXX_FLAGS",
-          "value": "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /I\"${projectDir}\\src\"",
+          "value": "/DWIN32 /D_WINDOWS /DUNICODE /D_UNICODE /DNOMINMAX /DWIN32_LEAN_AND_MEAN /W3 /GR /EHsc /I\"${projectDir}\\src\"",
+          "type": "STRING"
+        },
+        {
+          "name": "CEF_ROOT",
+          "value": "${projectDir}\\third_party\\cef",
           "type": "STRING"
         }
       ]

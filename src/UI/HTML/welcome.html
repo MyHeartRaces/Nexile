@@ -48,12 +48,12 @@
             max-width: 600px;
         }
 
-            .hotkeys h2 {
-                color: #4a90e2;
-                margin-top: 0;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-                padding-bottom: 10px;
-            }
+        .hotkeys h2 {
+            color: #4a90e2;
+            margin-top: 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
+        }
 
         .hotkey-item {
             display: flex;
@@ -92,65 +92,124 @@
             margin: 0 10px;
             cursor: pointer;
             transition: background-color 0.2s;
+            border: none;
+            font-size: 16px;
         }
 
-            .button:hover {
-                background-color: #3a80d2;
-            }
+        .button:hover {
+            background-color: #3a80d2;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="logo">NEXILE</div>
-        <div class="subtitle">Game Overlay Assistant</div>
+<div class="container">
+    <div class="logo">NEXILE</div>
+    <div class="subtitle">Game Overlay Assistant</div>
 
-        <div class="hotkeys">
-            <h2>Default Hotkeys</h2>
-            <div class="hotkey-item">
-                <span>Toggle Overlay</span>
-                <span class="hotkey-combo">Ctrl+F1</span>
-            </div>
-            <div class="hotkey-item">
-                <span>Price Check (PoE)</span>
-                <span class="hotkey-combo">Alt+D</span>
-            </div>
-            <div class="hotkey-item">
-                <span>Open Settings</span>
-                <span class="hotkey-combo">Ctrl+F2</span>
-            </div>
+    <div class="hotkeys">
+        <h2>Default Hotkeys</h2>
+        <div class="hotkey-item">
+            <span>Toggle Overlay</span>
+            <span class="hotkey-combo">Alt+Shift+O</span>
         </div>
-
-        <div class="controls">
-            <a href="#" class="button" id="settings-button">Settings</a>
-            <a href="#" class="button" id="close-button">Close Overlay</a>
+        <div class="hotkey-item">
+            <span>Price Check (PoE)</span>
+            <span class="hotkey-combo">Alt+P</span>
         </div>
-
-        <div class="footer">Nexile v0.1.0 | Press Ctrl+F1 to toggle overlay</div>
+        <div class="hotkey-item">
+            <span>Open Settings</span>
+            <span class="hotkey-combo">Alt+Shift+S</span>
+        </div>
+        <div class="hotkey-item">
+            <span>Open Browser</span>
+            <span class="hotkey-combo">Alt+Shift+B</span>
+        </div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Setup button event handlers
-            document.getElementById('settings-button').addEventListener('click', function() {
-                // Send message to C++ host to open settings
-                window.chrome.webview.postMessage(JSON.stringify({
+    <div class="controls">
+        <button class="button" id="settings-button">Settings</button>
+        <button class="button" id="browser-button">Open Browser</button>
+        <button class="button" id="close-button">Close Overlay</button>
+    </div>
+
+    <div class="footer">Nexile v0.1.0 | Press Alt+Shift+O to toggle overlay</div>
+</div>
+
+<script>
+    // CEF JavaScript Bridge
+    function sendMessage(data) {
+        if (window.nexile && window.nexile.postMessage) {
+            window.nexile.postMessage(data);
+        } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+            // Fallback for compatibility
+            window.chrome.webview.postMessage(JSON.stringify(data));
+        } else {
+            console.error('No message bridge available');
+        }
+    }
+
+    // Wait for DOM and Nexile bridge to be ready
+    function initializeWelcome() {
+        // Setup button event handlers
+        const settingsButton = document.getElementById('settings-button');
+        const browserButton = document.getElementById('browser-button');
+        const closeButton = document.getElementById('close-button');
+
+        if (settingsButton) {
+            settingsButton.addEventListener('click', function() {
+                sendMessage({
                     action: 'open_settings'
-                }));
+                });
             });
+        }
 
-            document.getElementById('close-button').addEventListener('click', function() {
-                // Send message to C++ host to close/hide overlay
-                window.chrome.webview.postMessage(JSON.stringify({
+        if (browserButton) {
+            browserButton.addEventListener('click', function() {
+                sendMessage({
+                    action: 'open_browser'
+                });
+            });
+        }
+
+        if (closeButton) {
+            closeButton.addEventListener('click', function() {
+                sendMessage({
                     action: 'toggle_overlay'
-                }));
+                });
             });
+        }
 
-            // Listen for messages from the C++ host
-            window.chrome.webview.addEventListener('message', function(event) {
-                const message = JSON.parse(event.data);
-                // Handle messages from C++ host if needed
-            });
-        });
-    </script>
+        console.log('Welcome page initialized with CEF bridge');
+    }
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeWelcome);
+    } else {
+        initializeWelcome();
+    }
+
+    // Listen for messages from C++ (if needed)
+    window.addEventListener('message', function(event) {
+        try {
+            const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            console.log('Received message:', message);
+            // Handle messages from C++ host if needed
+        } catch (e) {
+            console.error('Error processing message:', e);
+        }
+    });
+
+    // Expose global function for C++ to call
+    window.handleNexileMessage = function(messageData) {
+        try {
+            const message = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
+            console.log('Received Nexile message:', message);
+            // Process messages from C++ here
+        } catch (e) {
+            console.error('Error handling Nexile message:', e);
+        }
+    };
+</script>
 </body>
 </html>

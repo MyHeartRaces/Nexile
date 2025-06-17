@@ -17,13 +17,78 @@ Nexile is a powerful game overlay assistant designed specifically for action RPG
 - **In-Game Browser**: Access websites, build guides, and trading sites without leaving your game
 - **Settings Manager**: Customize all aspects of Nexile to suit your preferences
 
+## Technical Architecture
+
+### CEF Integration
+Nexile has been migrated from Microsoft WebView2 to Chromium Embedded Framework (CEF) for better cross-platform compatibility and enhanced performance. The CEF integration provides:
+
+- **Enhanced JavaScript Bridge**: Improved communication between C++ and JavaScript
+- **Better Resource Management**: Custom resource handlers for HTML assets
+- **Single Process Mode**: Simplified deployment and debugging
+- **Custom Protocol Support**: Support for `nexile://` protocol for internal resources
 
 ## Getting Started
 
 ### System Requirements
-- Windows 10 or newer
-- Microsoft Edge WebView2 Runtime (included in the installation)
+- Windows 10 or newer (64-bit)
+- Visual C++ Redistributable 2019 or newer
+- CEF Runtime (included in the installation)
 - Supported game client
+
+### Development Setup
+
+#### Prerequisites
+1. **Visual Studio 2022** with C++ development tools
+2. **CMake 3.20** or newer
+3. **vcpkg** for dependency management
+4. **CEF Binary Distribution** (see below)
+
+#### CEF Setup
+1. Download the CEF Binary Distribution for Windows 64-bit from [CEF Downloads](https://cef-builds.spotifycdn.com/index.html)
+    - Recommended: Standard Distribution (not Minimal)
+    - Version: 120.x or newer
+2. Extract CEF to `third_party/cef/` in the project root
+3. The directory structure should look like:
+   ```
+   third_party/cef/
+   ├── cmake/
+   ├── include/
+   ├── Resources/
+   ├── windows64/
+   │   ├── libcef.dll
+   │   ├── libcef_dll_wrapper.lib
+   │   └── ...
+   └── README.txt
+   ```
+
+#### Building
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd nexile
+   ```
+
+2. Initialize vcpkg dependencies:
+   ```bash
+   vcpkg install nlohmann-json
+   ```
+
+3. Configure with CMake:
+   ```bash
+   mkdir build
+   cd build
+   cmake .. -DCMAKE_TOOLCHAIN_FILE=<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake
+   ```
+
+4. Build the project:
+   ```bash
+   cmake --build . --config Release
+   ```
+
+#### CEF Distribution Notes
+- The CEF binaries are **not included** in the repository due to size constraints
+- You must download and extract CEF manually before building
+- Make sure to use the correct architecture (x64) and version compatibility
 
 ### Installation
 
@@ -75,14 +140,106 @@ Nexile automatically creates separate configuration profiles for each supported 
 - **Click-Through**: Toggle whether you can interact with the game through the overlay
 - **Position**: The overlay automatically centers on your game window
 
+## Development
+
+### Project Structure
+```
+src/
+├── Core/           # Application core and main loop
+├── UI/             # User interface components (CEF integration)
+├── Modules/        # Game-specific modules
+├── Game/           # Game detection and window management
+├── Input/          # Hotkey management
+├── Config/         # Configuration and profile management
+└── Utils/          # Utility functions and logging
+```
+
+### CEF Integration Details
+
+#### JavaScript Bridge
+The CEF integration uses a custom JavaScript bridge for communication:
+```javascript
+// Send message to C++
+window.nexile.postMessage({
+    action: 'example_action',
+    data: 'example_data'
+});
+
+// Receive messages from C++
+window.handleNexileMessage = function(messageData) {
+    // Process message from C++
+};
+```
+
+#### Resource Loading
+HTML resources are loaded using a custom resource handler that supports the `nexile://` protocol for internal assets.
+
+#### Single Process Mode
+CEF runs in single-process mode for simplified deployment and debugging. This may be changed to multi-process in future versions for better stability.
+
+### Module Development
+
+Modules can be developed as either:
+1. **Built-in modules**: Compiled into the main executable
+2. **Plugin modules**: Separate DLLs loaded at runtime
+
+Each module must implement the `IModule` interface and provide:
+- Module identification and metadata
+- Game compatibility information
+- HTML-based user interface
+- Hotkey handling
+
 ## Troubleshooting
 
+### CEF Issues
+- **CEF initialization failed**: Ensure CEF binaries are in the correct location
+- **Blank overlay**: Check that HTML resources are being loaded correctly
+- **JavaScript errors**: Use CEF developer tools (F12) for debugging
+
+### General Issues
 - If hotkeys aren't working, check for conflicts with other applications
 - Ensure your game is running in supported mode (fullscreen windowed recommended)
 - Check the application logs in %APPDATA%\Nexile for error messages
 
+### Known Limitations
+- CEF requires additional memory compared to WebView2
+- Single-process mode may be less stable than multi-process
+- Some websites may not render correctly in the embedded browser
+
+## Migration from WebView2
+
+This version represents a complete migration from Microsoft WebView2 to CEF. Key changes include:
+
+### Breaking Changes
+- **CEF Dependency**: CEF binaries must be distributed with the application
+- **JavaScript API**: Updated message passing interface
+- **Resource Loading**: Changed from file:// URLs to custom protocol
+- **Build Requirements**: Additional CEF setup steps required
+
+### Benefits
+- **Better Cross-Platform Support**: CEF works on multiple operating systems
+- **Enhanced Control**: More control over browser behavior and rendering
+- **Improved Performance**: Better resource management and caching
+- **Modern Web Features**: Support for latest web standards
+
+### Migration Notes
+- All HTML files have been updated for CEF compatibility
+- JavaScript bridge functions maintain backward compatibility where possible
+- Configuration files and user data remain compatible
+
 ## Credits
 
 Nexile is developed by the Nexile Team and utilizes the following technologies:
-- Microsoft WebView2
+- Chromium Embedded Framework (CEF)
 - nlohmann/json for configuration handling
+- Windows API for system integration
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contributing
+
+Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
+
+For bug reports and feature requests, please use the GitHub issue tracker.

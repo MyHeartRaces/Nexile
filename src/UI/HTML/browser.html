@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexile Browser</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(20, 20, 20, 0.95);
+            color: white;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        .browser-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .address-bar {
+            display: flex;
+            padding: 10px;
+            background-color: rgba(40, 40, 40, 1.0);
+            border-radius: 5px;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        .address-input {
+            flex-grow: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 3px;
+            background-color: rgba(60, 60, 60, 1.0);
+            color: white;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+
+        .address-input:focus {
+            outline: none;
+            background-color: rgba(70, 70, 70, 1.0);
+        }
+
+        .navigation-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .nav-button {
+            background-color: #4a90e2;
+            border: none;
+            border-radius: 3px;
+            color: white;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .nav-button:hover {
+            background-color: #3a80d2;
+        }
+
+        .bookmarks {
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            background-color: rgba(40, 40, 40, 1.0);
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .bookmark {
+            background-color: #333;
+            color: #ddd;
+            padding: 6px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .bookmark:hover {
+            background-color: #444;
+        }
+
+        .browser-content {
+            flex-grow: 1;
+            width: 100%;
+            background-color: white;
+            border-radius: 5px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .page-content {
+            flex-grow: 1;
+            padding: 20px;
+            background-color: white;
+            color: black;
+            overflow-y: auto;
+        }
+
+        .status-bar {
+            padding: 8px;
+            background-color: rgba(40, 40, 40, 1.0);
+            border-radius: 3px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        /* Simple page styles */
+        .simple-page {
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .simple-page h1 {
+            color: #333;
+            border-bottom: 2px solid #4a90e2;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .simple-page h2 {
+            color: #444;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        .simple-page .link-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .simple-page .link-card {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #4a90e2;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .simple-page .link-card:hover {
+            background-color: #e9e9e9;
+        }
+
+        .simple-page .link-card h3 {
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+
+        .simple-page .link-card p {
+            margin: 0;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div class="browser-container">
+    <div class="address-bar">
+        <input type="text" class="address-input" id="urlInput" placeholder="Enter URL or search term..." />
+        <div class="navigation-buttons">
+            <button class="nav-button" id="goButton">Go</button>
+            <button class="nav-button" id="backButton">←</button>
+            <button class="nav-button" id="homeButton">Home</button>
+            <button class="nav-button" id="closeButton">Close</button>
+        </div>
+    </div>
+
+    <div class="bookmarks">
+        <div class="bookmark" data-url="home">Home</div>
+        <div class="bookmark" data-url="https://www.google.com">Google</div>
+        <div class="bookmark" data-url="https://www.reddit.com/r/pathofexile">PoE Reddit</div>
+        <div class="bookmark" data-url="https://www.poelab.com">PoE Lab</div>
+        <div class="bookmark" data-url="https://poe.ninja">poe.ninja</div>
+        <div class="bookmark" data-url="https://poedb.tw">PoeDB</div>
+        <div class="bookmark" data-url="https://pathofexile.fandom.com">PoE Wiki</div>
+    </div>
+
+    <div class="browser-content">
+        <div class="loading" id="loadingIndicator">Loading...</div>
+        <div class="page-content" id="pageContent">
+            <!-- Default home page will be loaded here -->
+        </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">Ready</div>
+</div>
+
+<script>
+    // CEF JavaScript Bridge
+    function sendMessage(data) {
+        if (window.nexile && window.nexile.postMessage) {
+            window.nexile.postMessage(data);
+        } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+            // Fallback for compatibility
+            window.chrome.webview.postMessage(JSON.stringify(data));
+        } else {
+            console.error('No message bridge available');
+        }
+    }
+
+    // Browser functionality
+    let currentUrl = 'home';
+    let browserHistory = ['home'];
+    let historyIndex = 0;
+
+    function initializeBrowser() {
+        const urlInput = document.getElementById('urlInput');
+        const goButton = document.getElementById('goButton');
+        const backButton = document.getElementById('backButton');
+        const homeButton = document.getElementById('homeButton');
+        const closeButton = document.getElementById('closeButton');
+        const statusBar = document.getElementById('statusBar');
+        const pageContent = document.getElementById('pageContent');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const bookmarks = document.querySelectorAll('.bookmark');
+
+        // Function to navigate to a URL
+        function navigateToUrl(url) {
+            if (!url || url.trim() === '') return;
+
+            url = url.trim();
+
+            // Handle special URLs
+            if (url === 'home') {
+                loadHomePage();
+                currentUrl = 'home';
+                urlInput.value = 'Home';
+                updateHistory('home');
+                return;
+            }
+
+            // Add protocol if missing
+            if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('file://')) {
+                // Check if it looks like a domain
+                if (url.includes('.') && !url.includes(' ')) {
+                    url = 'https://' + url;
+                } else {
+                    // Treat as search
+                    url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
+                }
+            }
+
+            // Show loading
+            showLoading(true);
+            statusBar.textContent = 'Loading: ' + url;
+
+            // Simulate loading delay
+            setTimeout(() => {
+                loadExternalUrl(url);
+                currentUrl = url;
+                urlInput.value = url;
+                updateHistory(url);
+                showLoading(false);
+                statusBar.textContent = 'Loaded: ' + url;
+            }, 500);
+        }
+
+        function showLoading(show) {
+            if (show) {
+                loadingIndicator.classList.add('show');
+                pageContent.style.display = 'none';
+            } else {
+                loadingIndicator.classList.remove('show');
+                pageContent.style.display = 'block';
+            }
+        }
+
+        function updateHistory(url) {
+            // Remove future history if we're not at the end
+            if (historyIndex < browserHistory.length - 1) {
+                browserHistory = browserHistory.slice(0, historyIndex + 1);
+            }
+
+            // Add new URL if it's different from current
+            if (browserHistory[browserHistory.length - 1] !== url) {
+                browserHistory.push(url);
+                historyIndex = browserHistory.length - 1;
+            }
+        }
+
+        function loadHomePage() {
+            pageContent.innerHTML = `
+                    <div class="simple-page">
+                        <h1>Nexile Browser</h1>
+                        <p>Welcome to the Nexile integrated browser. Use this to access game-related websites without leaving your game.</p>
+
+                        <h2>Path of Exile Resources</h2>
+                        <div class="link-grid">
+                            <div class="link-card" onclick="navigateToUrl('https://www.pathofexile.com')">
+                                <h3>Official Website</h3>
+                                <p>Path of Exile official site</p>
+                            </div>
+                            <div class="link-card" onclick="navigateToUrl('https://poe.ninja')">
+                                <h3>poe.ninja</h3>
+                                <p>Economy and build analytics</p>
+                            </div>
+                            <div class="link-card" onclick="navigateToUrl('https://www.poelab.com')">
+                                <h3>PoE Lab</h3>
+                                <p>Daily labyrinth layouts</p>
+                            </div>
+                            <div class="link-card" onclick="navigateToUrl('https://pathofexile.fandom.com')">
+                                <h3>PoE Wiki</h3>
+                                <p>Community wiki</p>
+                            </div>
+                            <div class="link-card" onclick="navigateToUrl('https://poedb.tw')">
+                                <h3>PoeDB</h3>
+                                <p>Database and mechanics</p>
+                            </div>
+                            <div class="link-card" onclick="navigateToUrl('https://www.reddit.com/r/pathofexile')">
+                                <h3>r/pathofexile</h3>
+                                <p>Community discussions</p>
+                            </div>
+                        </div>
+
+                        <h2>General Resources</h2>
+                        <div class="link-grid">
+                            <div class="link-card" onclick="navigateToUrl('https://www.google.com')">
+                                <h3>Google</h3>
+                                <p>Search the web</p>
+                            </div>
+                            <div class="link-card" onclick="navigateToUrl('https://www.youtube.com')">
+                                <h3>YouTube</h3>
+                                <p>Videos and guides</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+        }
+
+        function loadExternalUrl(url) {
+            pageContent.innerHTML = `
+                    <div class="simple-page">
+                        <h1>External Website</h1>
+                        <p>You are trying to navigate to: <strong>${url}</strong></p>
+                        <p>Note: This is a simplified browser. For full website functionality, consider opening the link in your main browser.</p>
+                        <p>CEF integration would allow full website rendering here.</p>
+                        <button onclick="openInExternalBrowser('${url}')" style="background: #4a90e2; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 20px;">
+                            Open in External Browser
+                        </button>
+                    </div>
+                `;
+        }
+
+        // Event handlers
+        goButton.addEventListener('click', function() {
+            if (urlInput.value.trim()) {
+                navigateToUrl(urlInput.value.trim());
+            }
+        });
+
+        urlInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && urlInput.value.trim()) {
+                navigateToUrl(urlInput.value.trim());
+            }
+        });
+
+        backButton.addEventListener('click', function() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                const prevUrl = browserHistory[historyIndex];
+                navigateToUrl(prevUrl);
+            }
+        });
+
+        homeButton.addEventListener('click', function() {
+            navigateToUrl('home');
+        });
+
+        closeButton.addEventListener('click', function() {
+            sendMessage({
+                action: 'close_browser'
+            });
+        });
+
+        // Handle bookmark clicks
+        bookmarks.forEach(bookmark => {
+            bookmark.addEventListener('click', function() {
+                const url = this.getAttribute('data-url');
+                if (url) {
+                    navigateToUrl(url);
+                }
+            });
+        });
+
+        // Load home page initially
+        navigateToUrl('home');
+
+        console.log('Nexile browser initialized with CEF bridge');
+    }
+
+    function openInExternalBrowser(url) {
+        sendMessage({
+            action: 'open_external_browser',
+            url: url
+        });
+    }
+
+    // Listen for messages from C++
+    window.addEventListener('message', function(event) {
+        try {
+            const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            console.log('Received browser message:', message);
+            // Handle messages from C++ host if needed
+        } catch (e) {
+            console.error('Error processing browser message:', e);
+        }
+    });
+
+    // Expose global function for C++ to call
+    window.handleNexileMessage = function(messageData) {
+        try {
+            const message = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
+            console.log('Received Nexile browser message:', message);
+            // Process messages from C++ here
+        } catch (e) {
+            console.error('Error handling Nexile browser message:', e);
+        }
+    };
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeBrowser);
+    } else {
+        initializeBrowser();
+    }
+</script>
+</body>
+</html>

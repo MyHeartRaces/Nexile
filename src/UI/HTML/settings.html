@@ -80,13 +80,13 @@
             user-select: none;
         }
 
-            .checkbox-container input {
-                position: absolute;
-                opacity: 0;
-                cursor: pointer;
-                height: 0;
-                width: 0;
-            }
+        .checkbox-container input {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+            height: 0;
+            width: 0;
+        }
 
         .checkmark {
             position: absolute;
@@ -140,23 +140,23 @@
             outline: none;
         }
 
-            .slider::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                appearance: none;
-                width: 20px;
-                height: 20px;
-                border-radius: 50%;
-                background: var(--primary-color);
-                cursor: pointer;
-            }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+        }
 
-            .slider::-moz-range-thumb {
-                width: 20px;
-                height: 20px;
-                border-radius: 50%;
-                background: var(--primary-color);
-                cursor: pointer;
-            }
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+        }
 
         .slider-value {
             margin-left: 10px;
@@ -186,9 +186,9 @@
             font-size: 14px;
         }
 
-            .button:hover {
-                background-color: #3a80d2;
-            }
+        .button:hover {
+            background-color: #3a80d2;
+        }
 
         .button-small {
             padding: 3px 10px;
@@ -201,9 +201,9 @@
             margin-top: 20px;
         }
 
-            .buttons-container button {
-                margin-left: 10px;
-            }
+        .buttons-container button {
+            margin-left: 10px;
+        }
 
         /* Recording state */
         .recording {
@@ -227,420 +227,532 @@
             outline: none;
         }
 
-            select:focus {
-                border-color: var(--primary-color);
-            }
+        select:focus {
+            border-color: var(--primary-color);
+        }
     </style>
 </head>
 <body>
-    <div class="settings-container">
-        <h1>Nexile Settings</h1>
+<div class="settings-container">
+    <h1>Nexile Settings</h1>
 
-        <div class="settings-section">
-            <h2>General Settings</h2>
+    <div class="settings-section">
+        <h2>General Settings</h2>
 
-            <div class="setting-item">
-                <span class="setting-label">Overlay Opacity</span>
-                <div class="setting-control">
-                    <div class="slider-container">
-                        <input type="range" min="20" max="100" value="80" class="slider" id="opacity-slider">
-                    </div>
-                    <span class="slider-value" id="opacity-value">80%</span>
+        <div class="setting-item">
+            <span class="setting-label">Overlay Opacity</span>
+            <div class="setting-control">
+                <div class="slider-container">
+                    <input type="range" min="20" max="100" value="80" class="slider" id="opacity-slider">
                 </div>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Click-through Overlay</span>
-                <div class="setting-control">
-                    <label class="checkbox-container">
-                        <input type="checkbox" id="click-through-checkbox" checked>
-                        <span class="checkmark"></span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Start with Windows</span>
-                <div class="setting-control">
-                    <label class="checkbox-container">
-                        <input type="checkbox" id="autostart-checkbox">
-                        <span class="checkmark"></span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Auto-detect Games</span>
-                <div class="setting-control">
-                    <label class="checkbox-container">
-                        <input type="checkbox" id="autodetect-checkbox" checked>
-                        <span class="checkmark"></span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Current Game</span>
-                <div class="setting-control">
-                    <select id="game-select">
-                        <option value="None">None</option>
-                        <option value="PathOfExile">Path of Exile</option>
-                        <option value="PathOfExile2">Path of Exile 2</option>
-                        <option value="LastEpoch">Last Epoch</option>
-                    </select>
-                </div>
+                <span class="slider-value" id="opacity-value">80%</span>
             </div>
         </div>
 
-        <div class="settings-section">
-            <h2>Module Settings</h2>
-
-            <div class="setting-item">
-                <span class="setting-label">Price Check</span>
-                <div class="setting-control">
-                    <label class="checkbox-container">
-                        <input type="checkbox" id="price-check-checkbox" checked>
-                        <span class="checkmark"></span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Build Guide</span>
-                <div class="setting-control">
-                    <label class="checkbox-container">
-                        <input type="checkbox" id="build-guide-checkbox">
-                        <span class="checkmark"></span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Map Overlay</span>
-                <div class="setting-control">
-                    <label class="checkbox-container">
-                        <input type="checkbox" id="map-overlay-checkbox">
-                        <span class="checkmark"></span>
-                    </label>
-                </div>
+        <div class="setting-item">
+            <span class="setting-label">Click-through Overlay</span>
+            <div class="setting-control">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="click-through-checkbox" checked>
+                    <span class="checkmark"></span>
+                </label>
             </div>
         </div>
 
-        <div class="settings-section">
-            <h2>Hotkey Settings</h2>
-
-            <div class="setting-item">
-                <span class="setting-label">Toggle Overlay</span>
-                <div class="setting-control">
-                    <span class="hotkey-display" id="toggle-overlay-hotkey">Ctrl+F1</span>
-                    <button class="button button-small" id="toggle-overlay-button">Change</button>
-                </div>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Price Check</span>
-                <div class="setting-control">
-                    <span class="hotkey-display" id="price-check-hotkey">Alt+D</span>
-                    <button class="button button-small" id="price-check-button">Change</button>
-                </div>
-            </div>
-
-            <div class="setting-item">
-                <span class="setting-label">Settings</span>
-                <div class="setting-control">
-                    <span class="hotkey-display" id="settings-hotkey">Ctrl+F2</span>
-                    <button class="button button-small" id="settings-button">Change</button>
-                </div>
+        <div class="setting-item">
+            <span class="setting-label">Start with Windows</span>
+            <div class="setting-control">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="autostart-checkbox">
+                    <span class="checkmark"></span>
+                </label>
             </div>
         </div>
 
-        <div class="buttons-container">
-            <button class="button" id="defaults-button">Reset to Defaults</button>
-            <button class="button" id="cancel-button">Cancel</button>
-            <button class="button" id="save-button">Save</button>
+        <div class="setting-item">
+            <span class="setting-label">Auto-detect Games</span>
+            <div class="setting-control">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="autodetect-checkbox" checked>
+                    <span class="checkmark"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="setting-item">
+            <span class="setting-label">Current Game</span>
+            <div class="setting-control">
+                <select id="game-select">
+                    <option value="None">None</option>
+                    <option value="PathOfExile">Path of Exile</option>
+                    <option value="PathOfExile2">Path of Exile 2</option>
+                    <option value="LastEpoch">Last Epoch</option>
+                </select>
+            </div>
         </div>
     </div>
 
-    <script>
-        // Initialize UI
-        document.addEventListener('DOMContentLoaded', function () {
-            // Get settings from native app
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'get_settings'
-            }));
+    <div class="settings-section">
+        <h2>Module Settings</h2>
 
-            // Listen for events from C++ host
-            window.chrome.webview.addEventListener('message', function (event) {
-                const message = JSON.parse(event.data);
+        <div class="setting-item">
+            <span class="setting-label">Price Check</span>
+            <div class="setting-control">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="price-check-checkbox" checked>
+                    <span class="checkmark"></span>
+                </label>
+            </div>
+        </div>
 
-                if (message.action === 'load_settings') {
-                    loadSettings(message.settings);
-                } else if (message.action === 'settings_saved') {
-                    // Show saved notification if needed
-                    console.log('Settings saved successfully');
-                }
-            });
+        <div class="setting-item">
+            <span class="setting-label">Build Guide</span>
+            <div class="setting-control">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="build-guide-checkbox">
+                    <span class="checkmark"></span>
+                </label>
+            </div>
+        </div>
 
-            // Initialize UI event handlers
-            initializeEventHandlers();
+        <div class="setting-item">
+            <span class="setting-label">Map Overlay</span>
+            <div class="setting-control">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="map-overlay-checkbox">
+                    <span class="checkmark"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h2>Hotkey Settings</h2>
+
+        <div class="setting-item">
+            <span class="setting-label">Toggle Overlay</span>
+            <div class="setting-control">
+                <span class="hotkey-display" id="toggle-overlay-hotkey">Alt+Shift+O</span>
+                <button class="button button-small" id="toggle-overlay-button">Change</button>
+            </div>
+        </div>
+
+        <div class="setting-item">
+            <span class="setting-label">Price Check</span>
+            <div class="setting-control">
+                <span class="hotkey-display" id="price-check-hotkey">Alt+P</span>
+                <button class="button button-small" id="price-check-button">Change</button>
+            </div>
+        </div>
+
+        <div class="setting-item">
+            <span class="setting-label">Settings</span>
+            <div class="setting-control">
+                <span class="hotkey-display" id="settings-hotkey">Alt+Shift+S</span>
+                <button class="button button-small" id="settings-button">Change</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="buttons-container">
+        <button class="button" id="defaults-button">Reset to Defaults</button>
+        <button class="button" id="cancel-button">Cancel</button>
+        <button class="button" id="save-button">Save</button>
+    </div>
+</div>
+
+<script>
+    // CEF JavaScript Bridge
+    function sendMessage(data) {
+        if (window.nexile && window.nexile.postMessage) {
+            window.nexile.postMessage(data);
+        } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+            // Fallback for compatibility
+            window.chrome.webview.postMessage(JSON.stringify(data));
+        } else {
+            console.error('No message bridge available');
+        }
+    }
+
+    // Initialize UI
+    function initializeSettings() {
+        // Get settings from native app
+        sendMessage({
+            action: 'get_settings'
         });
 
-        // Initialize event handlers for UI elements
-        function initializeEventHandlers() {
-            // Opacity slider
-            const opacitySlider = document.getElementById('opacity-slider');
-            const opacityValue = document.getElementById('opacity-value');
+        // Initialize UI event handlers
+        initializeEventHandlers();
+    }
 
+    // Initialize event handlers for UI elements
+    function initializeEventHandlers() {
+        // Opacity slider
+        const opacitySlider = document.getElementById('opacity-slider');
+        const opacityValue = document.getElementById('opacity-value');
+
+        if (opacitySlider && opacityValue) {
             opacitySlider.addEventListener('input', function () {
                 opacityValue.textContent = this.value + '%';
             });
+        }
 
-            // Hotkey buttons
-            document.getElementById('toggle-overlay-button').addEventListener('click', function () {
+        // Hotkey buttons
+        const toggleOverlayButton = document.getElementById('toggle-overlay-button');
+        const priceCheckButton = document.getElementById('price-check-button');
+        const settingsButton = document.getElementById('settings-button');
+
+        if (toggleOverlayButton) {
+            toggleOverlayButton.addEventListener('click', function () {
                 startHotkeyRecording(1000, 'toggle-overlay-hotkey');
             });
+        }
 
-            document.getElementById('price-check-button').addEventListener('click', function () {
+        if (priceCheckButton) {
+            priceCheckButton.addEventListener('click', function () {
                 startHotkeyRecording(1001, 'price-check-hotkey');
             });
+        }
 
-            document.getElementById('settings-button').addEventListener('click', function () {
+        if (settingsButton) {
+            settingsButton.addEventListener('click', function () {
                 startHotkeyRecording(1004, 'settings-hotkey');
             });
+        }
 
-            // Action buttons
-            document.getElementById('save-button').addEventListener('click', function () {
+        // Action buttons
+        const saveButton = document.getElementById('save-button');
+        const cancelButton = document.getElementById('cancel-button');
+        const defaultsButton = document.getElementById('defaults-button');
+
+        if (saveButton) {
+            saveButton.addEventListener('click', function () {
                 saveSettings();
             });
+        }
 
-            document.getElementById('cancel-button').addEventListener('click', function () {
-                window.chrome.webview.postMessage(JSON.stringify({
+        if (cancelButton) {
+            cancelButton.addEventListener('click', function () {
+                sendMessage({
                     action: 'cancel_settings'
-                }));
+                });
             });
+        }
 
-            document.getElementById('defaults-button').addEventListener('click', function () {
-                window.chrome.webview.postMessage(JSON.stringify({
+        if (defaultsButton) {
+            defaultsButton.addEventListener('click', function () {
+                sendMessage({
                     action: 'reset_settings'
-                }));
-            });
-
-            // Handle key press for hotkey recording
-            document.addEventListener('keydown', function (e) {
-                if (currentlyRecordingHotkey) {
-                    e.preventDefault();
-
-                    // Check modifiers
-                    const ctrl = e.ctrlKey;
-                    const alt = e.altKey;
-                    const shift = e.shiftKey;
-
-                    // Get key code
-                    const key = e.keyCode;
-
-                    // Update UI
-                    let hotkeyText = '';
-                    if (ctrl) hotkeyText += 'Ctrl+';
-                    if (alt) hotkeyText += 'Alt+';
-                    if (shift) hotkeyText += 'Shift+';
-
-                    // Convert key code to string
-                    hotkeyText += keyCodeToString(key);
-
-                    // Update display
-                    document.getElementById(currentlyRecordingHotkeyElement).textContent = hotkeyText;
-                    document.getElementById(currentlyRecordingHotkeyElement).classList.remove('recording');
-
-                    // Send to native
-                    window.chrome.webview.postMessage(JSON.stringify({
-                        action: 'hotkey_update',
-                        hotkeyId: currentlyRecordingHotkeyId,
-                        ctrl: ctrl,
-                        alt: alt,
-                        shift: shift,
-                        key: key
-                    }));
-
-                    // Reset recording state
-                    stopHotkeyRecording();
-                }
+                });
             });
         }
 
-        // Load settings into UI
-        function loadSettings(settings) {
-            console.log('Loading settings:', settings);
-
-            // General settings
-            if (settings.general) {
-                // Opacity
-                if (settings.general.opacity !== undefined) {
-                    document.getElementById('opacity-slider').value = settings.general.opacity;
-                    document.getElementById('opacity-value').textContent = settings.general.opacity + '%';
-                }
-
-                // Click through
-                if (settings.general.clickThrough !== undefined) {
-                    document.getElementById('click-through-checkbox').checked = settings.general.clickThrough;
-                }
-
-                // Autostart
-                if (settings.general.autostart !== undefined) {
-                    document.getElementById('autostart-checkbox').checked = settings.general.autostart;
-                }
-
-                // Autodetect
-                if (settings.general.autodetect !== undefined) {
-                    document.getElementById('autodetect-checkbox').checked = settings.general.autodetect;
-                }
-
-                // Current game
-                if (settings.general.currentGame) {
-                    document.getElementById('game-select').value = settings.general.currentGame;
-                }
-            }
-
-            // Module settings
-            if (settings.modules) {
-                // Price check
-                if (settings.modules.price_check !== undefined) {
-                    document.getElementById('price-check-checkbox').checked = settings.modules.price_check;
-                }
-
-                // Build guide
-                if (settings.modules.build_guide !== undefined) {
-                    document.getElementById('build-guide-checkbox').checked = settings.modules.build_guide;
-                }
-
-                // Map overlay
-                if (settings.modules.map_overlay !== undefined) {
-                    document.getElementById('map-overlay-checkbox').checked = settings.modules.map_overlay;
-                }
-            }
-
-            // Hotkey settings
-            if (settings.hotkeys) {
-                // Toggle overlay
-                if (settings.hotkeys['1000']) {
-                    document.getElementById('toggle-overlay-hotkey').textContent = settings.hotkeys['1000'];
-                }
-
-                // Price check
-                if (settings.hotkeys['1001']) {
-                    document.getElementById('price-check-hotkey').textContent = settings.hotkeys['1001'];
-                }
-
-                // Settings
-                if (settings.hotkeys['1004']) {
-                    document.getElementById('settings-hotkey').textContent = settings.hotkeys['1004'];
-                }
-            }
-        }
-
-        // Save settings
-        function saveSettings() {
-            const settings = {
-                general: {
-                    opacity: parseInt(document.getElementById('opacity-slider').value),
-                    clickThrough: document.getElementById('click-through-checkbox').checked,
-                    autostart: document.getElementById('autostart-checkbox').checked,
-                    autodetect: document.getElementById('autodetect-checkbox').checked,
-                    currentGame: document.getElementById('game-select').value
-                },
-                modules: {
-                    price_check: document.getElementById('price-check-checkbox').checked,
-                    build_guide: document.getElementById('build-guide-checkbox').checked,
-                    map_overlay: document.getElementById('map-overlay-checkbox').checked
-                }
-            };
-
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'save_settings',
-                settings: settings
-            }));
-        }
-
-        // Hotkey recording
-        let currentlyRecordingHotkey = false;
-        let currentlyRecordingHotkeyId = 0;
-        let currentlyRecordingHotkeyElement = '';
-
-        function startHotkeyRecording(hotkeyId, elementId) {
-            // If already recording, stop
+        // Handle key press for hotkey recording
+        document.addEventListener('keydown', function (e) {
             if (currentlyRecordingHotkey) {
-                document.getElementById(currentlyRecordingHotkeyElement).classList.remove('recording');
+                e.preventDefault();
+
+                // Check modifiers
+                const ctrl = e.ctrlKey;
+                const alt = e.altKey;
+                const shift = e.shiftKey;
+
+                // Get key code
+                const key = e.keyCode;
+
+                // Update UI
+                let hotkeyText = '';
+                if (ctrl) hotkeyText += 'Ctrl+';
+                if (alt) hotkeyText += 'Alt+';
+                if (shift) hotkeyText += 'Shift+';
+
+                // Convert key code to string
+                hotkeyText += keyCodeToString(key);
+
+                // Update display
+                const displayElement = document.getElementById(currentlyRecordingHotkeyElement);
+                if (displayElement) {
+                    displayElement.textContent = hotkeyText;
+                    displayElement.classList.remove('recording');
+                }
+
+                // Send to native
+                sendMessage({
+                    action: 'hotkey_update',
+                    hotkeyId: currentlyRecordingHotkeyId,
+                    ctrl: ctrl,
+                    alt: alt,
+                    shift: shift,
+                    key: key
+                });
+
+                // Reset recording state
                 stopHotkeyRecording();
             }
+        });
+    }
 
-            // Start recording
-            currentlyRecordingHotkey = true;
-            currentlyRecordingHotkeyId = hotkeyId;
-            currentlyRecordingHotkeyElement = elementId;
+    // Load settings into UI
+    function loadSettings(settings) {
+        console.log('Loading settings:', settings);
 
-            // Update UI
-            document.getElementById(elementId).textContent = 'Press a key...';
-            document.getElementById(elementId).classList.add('recording');
-
-            // Notify native
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'hotkey_recording_start',
-                hotkeyId: hotkeyId
-            }));
-        }
-
-        function stopHotkeyRecording() {
-            currentlyRecordingHotkey = false;
-
-            // Notify native
-            window.chrome.webview.postMessage(JSON.stringify({
-                action: 'hotkey_recording_stop'
-            }));
-        }
-
-        // Convert key code to string
-        function keyCodeToString(keyCode) {
-            // Handle special keys
-            switch (keyCode) {
-                case 27: return 'Esc';
-                case 112: return 'F1';
-                case 113: return 'F2';
-                case 114: return 'F3';
-                case 115: return 'F4';
-                case 116: return 'F5';
-                case 117: return 'F6';
-                case 118: return 'F7';
-                case 119: return 'F8';
-                case 120: return 'F9';
-                case 121: return 'F10';
-                case 122: return 'F11';
-                case 123: return 'F12';
-                case 9: return 'Tab';
-                case 13: return 'Enter';
-                case 32: return 'Space';
-                case 46: return 'Del';
-                case 36: return 'Home';
-                case 35: return 'End';
-                case 33: return 'PgUp';
-                case 34: return 'PgDn';
-                case 37: return 'Left';
-                case 38: return 'Up';
-                case 39: return 'Right';
-                case 40: return 'Down';
-                case 45: return 'Ins';
+        // General settings
+        if (settings.general) {
+            // Opacity
+            if (settings.general.opacity !== undefined) {
+                const opacitySlider = document.getElementById('opacity-slider');
+                const opacityValue = document.getElementById('opacity-value');
+                if (opacitySlider && opacityValue) {
+                    opacitySlider.value = settings.general.opacity;
+                    opacityValue.textContent = settings.general.opacity + '%';
+                }
             }
 
-            // Handle letters and numbers
-            if (keyCode >= 48 && keyCode <= 57) {
-                return String.fromCharCode(keyCode); // 0-9
+            // Click through
+            if (settings.general.clickThrough !== undefined) {
+                const checkbox = document.getElementById('click-through-checkbox');
+                if (checkbox) {
+                    checkbox.checked = settings.general.clickThrough;
+                }
             }
 
-            if (keyCode >= 65 && keyCode <= 90) {
-                return String.fromCharCode(keyCode); // A-Z
+            // Autostart
+            if (settings.general.autostart !== undefined) {
+                const checkbox = document.getElementById('autostart-checkbox');
+                if (checkbox) {
+                    checkbox.checked = settings.general.autostart;
+                }
             }
 
-            // Unknown key
-            return 'Key(' + keyCode + ')';
+            // Autodetect
+            if (settings.general.autodetect !== undefined) {
+                const checkbox = document.getElementById('autodetect-checkbox');
+                if (checkbox) {
+                    checkbox.checked = settings.general.autodetect;
+                }
+            }
+
+            // Current game
+            if (settings.general.currentGame) {
+                const select = document.getElementById('game-select');
+                if (select) {
+                    select.value = settings.general.currentGame;
+                }
+            }
         }
-    </script>
+
+        // Module settings
+        if (settings.modules) {
+            // Price check
+            if (settings.modules.price_check !== undefined) {
+                const checkbox = document.getElementById('price-check-checkbox');
+                if (checkbox) {
+                    checkbox.checked = settings.modules.price_check;
+                }
+            }
+
+            // Build guide
+            if (settings.modules.build_guide !== undefined) {
+                const checkbox = document.getElementById('build-guide-checkbox');
+                if (checkbox) {
+                    checkbox.checked = settings.modules.build_guide;
+                }
+            }
+
+            // Map overlay
+            if (settings.modules.map_overlay !== undefined) {
+                const checkbox = document.getElementById('map-overlay-checkbox');
+                if (checkbox) {
+                    checkbox.checked = settings.modules.map_overlay;
+                }
+            }
+        }
+
+        // Hotkey settings
+        if (settings.hotkeys) {
+            // Toggle overlay
+            if (settings.hotkeys['1000']) {
+                const element = document.getElementById('toggle-overlay-hotkey');
+                if (element) {
+                    element.textContent = settings.hotkeys['1000'];
+                }
+            }
+
+            // Price check
+            if (settings.hotkeys['1001']) {
+                const element = document.getElementById('price-check-hotkey');
+                if (element) {
+                    element.textContent = settings.hotkeys['1001'];
+                }
+            }
+
+            // Settings
+            if (settings.hotkeys['1004']) {
+                const element = document.getElementById('settings-hotkey');
+                if (element) {
+                    element.textContent = settings.hotkeys['1004'];
+                }
+            }
+        }
+    }
+
+    // Save settings
+    function saveSettings() {
+        const opacitySlider = document.getElementById('opacity-slider');
+        const clickThroughCheckbox = document.getElementById('click-through-checkbox');
+        const autostartCheckbox = document.getElementById('autostart-checkbox');
+        const autodetectCheckbox = document.getElementById('autodetect-checkbox');
+        const gameSelect = document.getElementById('game-select');
+        const priceCheckCheckbox = document.getElementById('price-check-checkbox');
+        const buildGuideCheckbox = document.getElementById('build-guide-checkbox');
+        const mapOverlayCheckbox = document.getElementById('map-overlay-checkbox');
+
+        const settings = {
+            general: {
+                opacity: opacitySlider ? parseInt(opacitySlider.value) : 80,
+                clickThrough: clickThroughCheckbox ? clickThroughCheckbox.checked : true,
+                autostart: autostartCheckbox ? autostartCheckbox.checked : false,
+                autodetect: autodetectCheckbox ? autodetectCheckbox.checked : true,
+                currentGame: gameSelect ? gameSelect.value : 'None'
+            },
+            modules: {
+                price_check: priceCheckCheckbox ? priceCheckCheckbox.checked : false,
+                build_guide: buildGuideCheckbox ? buildGuideCheckbox.checked : false,
+                map_overlay: mapOverlayCheckbox ? mapOverlayCheckbox.checked : false
+            }
+        };
+
+        sendMessage({
+            action: 'save_settings',
+            settings: settings
+        });
+    }
+
+    // Hotkey recording
+    let currentlyRecordingHotkey = false;
+    let currentlyRecordingHotkeyId = 0;
+    let currentlyRecordingHotkeyElement = '';
+
+    function startHotkeyRecording(hotkeyId, elementId) {
+        // If already recording, stop
+        if (currentlyRecordingHotkey) {
+            const prevElement = document.getElementById(currentlyRecordingHotkeyElement);
+            if (prevElement) {
+                prevElement.classList.remove('recording');
+            }
+            stopHotkeyRecording();
+        }
+
+        // Start recording
+        currentlyRecordingHotkey = true;
+        currentlyRecordingHotkeyId = hotkeyId;
+        currentlyRecordingHotkeyElement = elementId;
+
+        // Update UI
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.textContent = 'Press a key...';
+            element.classList.add('recording');
+        }
+
+        // Notify native
+        sendMessage({
+            action: 'hotkey_recording_start',
+            hotkeyId: hotkeyId
+        });
+    }
+
+    function stopHotkeyRecording() {
+        currentlyRecordingHotkey = false;
+
+        // Notify native
+        sendMessage({
+            action: 'hotkey_recording_stop'
+        });
+    }
+
+    // Convert key code to string
+    function keyCodeToString(keyCode) {
+        // Handle special keys
+        switch (keyCode) {
+            case 27: return 'Esc';
+            case 112: return 'F1';
+            case 113: return 'F2';
+            case 114: return 'F3';
+            case 115: return 'F4';
+            case 116: return 'F5';
+            case 117: return 'F6';
+            case 118: return 'F7';
+            case 119: return 'F8';
+            case 120: return 'F9';
+            case 121: return 'F10';
+            case 122: return 'F11';
+            case 123: return 'F12';
+            case 9: return 'Tab';
+            case 13: return 'Enter';
+            case 32: return 'Space';
+            case 46: return 'Del';
+            case 36: return 'Home';
+            case 35: return 'End';
+            case 33: return 'PgUp';
+            case 34: return 'PgDn';
+            case 37: return 'Left';
+            case 38: return 'Up';
+            case 39: return 'Right';
+            case 40: return 'Down';
+            case 45: return 'Ins';
+        }
+
+        // Handle letters and numbers
+        if (keyCode >= 48 && keyCode <= 57) {
+            return String.fromCharCode(keyCode); // 0-9
+        }
+
+        if (keyCode >= 65 && keyCode <= 90) {
+            return String.fromCharCode(keyCode); // A-Z
+        }
+
+        // Unknown key
+        return 'Key(' + keyCode + ')';
+    }
+
+    // Listen for events from C++ host
+    window.addEventListener('message', function(event) {
+        try {
+            const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+
+            if (message.action === 'load_settings') {
+                loadSettings(message.settings);
+            } else if (message.action === 'settings_saved') {
+                // Show saved notification if needed
+                console.log('Settings saved successfully');
+            }
+        } catch (e) {
+            console.error('Error processing message from C++:', e);
+        }
+    });
+
+    // Expose global function for C++ to call
+    window.handleNexileMessage = function(messageData) {
+        try {
+            const message = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
+
+            if (message.action === 'load_settings') {
+                loadSettings(message.settings);
+            } else if (message.action === 'settings_saved') {
+                console.log('Settings saved successfully');
+            }
+        } catch (e) {
+            console.error('Error handling Nexile message:', e);
+        }
+    };
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeSettings);
+    } else {
+        initializeSettings();
+    }
+</script>
 </body>
 </html>

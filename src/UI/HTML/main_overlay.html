@@ -52,9 +52,9 @@
             border: 1px solid var(--border-color);
         }
 
-            .nexile-control-panel:hover {
-                width: 180px;
-            }
+        .nexile-control-panel:hover {
+            width: 180px;
+        }
 
         .panel-toggle {
             width: 100%;
@@ -93,10 +93,10 @@
             transition: max-height 0.3s ease;
         }
 
-            .module-list.expanded {
-                max-height: 300px;
-                overflow-y: auto;
-            }
+        .module-list.expanded {
+            max-height: 300px;
+            overflow-y: auto;
+        }
 
         .module-item {
             display: flex;
@@ -106,9 +106,9 @@
             border-bottom: 1px solid var(--border-color);
         }
 
-            .module-item:hover {
-                background-color: var(--secondary-bg);
-            }
+        .module-item:hover {
+            background-color: var(--secondary-bg);
+        }
 
         .module-icon {
             width: 24px;
@@ -146,9 +146,9 @@
             overflow: auto;
         }
 
-            .module-container.active {
-                display: block;
-            }
+        .module-container.active {
+            display: block;
+        }
 
         .module-header {
             display: flex;
@@ -177,9 +177,9 @@
             border-radius: 50%;
         }
 
-            .module-close:hover {
-                background-color: var(--secondary-bg);
-            }
+        .module-close:hover {
+            background-color: var(--secondary-bg);
+        }
 
         /* For draggable modules */
         .draggable {
@@ -192,125 +192,144 @@
             display: inline-block;
         }
 
-            .tooltip .tooltip-text {
-                visibility: hidden;
-                background-color: var(--secondary-bg);
-                color: var(--text-color);
-                text-align: center;
-                border-radius: 5px;
-                padding: 5px 10px;
-                position: absolute;
-                z-index: 10001;
-                bottom: 125%;
-                left: 50%;
-                transform: translateX(-50%);
-                opacity: 0;
-                transition: opacity 0.3s;
-                white-space: nowrap;
-            }
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            background-color: var(--secondary-bg);
+            color: var(--text-color);
+            text-align: center;
+            border-radius: 5px;
+            padding: 5px 10px;
+            position: absolute;
+            z-index: 10001;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            white-space: nowrap;
+        }
 
-            .tooltip:hover .tooltip-text {
-                visibility: visible;
-                opacity: 1;
-            }
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
-    <div class="nexile-overlay">
-        <!-- Control Panel -->
-        <div class="nexile-control-panel" id="control-panel">
-            <div class="panel-toggle" id="panel-toggle">
-                <div class="panel-toggle-icon">N</div>
-                <div class="panel-toggle-text">Nexile Overlay</div>
-            </div>
-            <div class="module-list" id="module-list">
-                <!-- Modules will be added here dynamically -->
-                <div class="module-item" data-module-id="price_check">
-                    <div class="module-icon">$</div>
-                    <div class="module-text">Price Check</div>
-                </div>
-                <div class="module-item" data-module-id="build_guide">
-                    <div class="module-icon">B</div>
-                    <div class="module-text">Build Guide</div>
-                </div>
-                <div class="module-item" data-module-id="settings">
-                    <div class="module-icon">⚙</div>
-                    <div class="module-text">Settings</div>
-                </div>
-            </div>
+<div class="nexile-overlay">
+    <!-- Control Panel -->
+    <div class="nexile-control-panel" id="control-panel">
+        <div class="panel-toggle" id="panel-toggle">
+            <div class="panel-toggle-icon">N</div>
+            <div class="panel-toggle-text">Nexile Overlay</div>
         </div>
-
-        <!-- Module Containers -->
-        <div id="module-containers">
-            <!-- Module UIs will be added here dynamically -->
+        <div class="module-list" id="module-list">
+            <!-- Modules will be added here dynamically -->
+            <div class="module-item" data-module-id="price_check">
+                <div class="module-icon">$</div>
+                <div class="module-text">Price Check</div>
+            </div>
+            <div class="module-item" data-module-id="build_guide">
+                <div class="module-icon">B</div>
+                <div class="module-text">Build Guide</div>
+            </div>
+            <div class="module-item" data-module-id="settings">
+                <div class="module-icon">⚙</div>
+                <div class="module-text">Settings</div>
+            </div>
         </div>
     </div>
 
-    <script>// Initialize control panel
-        document.addEventListener('DOMContentLoaded', function() {
-            // Toggle panel
-            const panelToggle = document.getElementById('panel-toggle');
-            const moduleList = document.getElementById('module-list');
+    <!-- Module Containers -->
+    <div id="module-containers">
+        <!-- Module UIs will be added here dynamically -->
+    </div>
+</div>
 
+<script>
+    // CEF JavaScript Bridge
+    function sendMessage(data) {
+        if (window.nexile && window.nexile.postMessage) {
+            window.nexile.postMessage(data);
+        } else if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+            // Fallback for compatibility
+            window.chrome.webview.postMessage(JSON.stringify(data));
+        } else {
+            console.error('No message bridge available');
+        }
+    }
+
+    // Initialize control panel
+    function initializeOverlay() {
+        // Toggle panel
+        const panelToggle = document.getElementById('panel-toggle');
+        const moduleList = document.getElementById('module-list');
+
+        if (panelToggle && moduleList) {
             panelToggle.addEventListener('click', function() {
                 moduleList.classList.toggle('expanded');
             });
+        }
 
-            // Initialize module items
-            const moduleItems = document.querySelectorAll('.module-item');
-            moduleItems.forEach(item => {
-                item.addEventListener('click', function() {
-                    const moduleId = this.getAttribute('data-module-id');
-                    showModule(moduleId);
-                });
+        // Initialize module items
+        const moduleItems = document.querySelectorAll('.module-item');
+        moduleItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const moduleId = this.getAttribute('data-module-id');
+                showModule(moduleId);
             });
-
-            // Setup communication with native app
-            window.chrome.webview.addEventListener('message', function(event) {
-                const message = JSON.parse(event.data);
-                handleNativeMessage(message);
-            });
-
-            // Send ready message to native code
-            sendToNative({ action: 'overlay_ready' });
         });
 
-        // Handle messages from native code
-        function handleNativeMessage(message) {
-            switch (message.action) {
+        // Send ready message to native code
+        sendMessage({ action: 'overlay_ready' });
+
+        console.log('Nexile overlay initialized with CEF bridge');
+    }
+
+    // Handle messages from native code
+    function handleNativeMessage(message) {
+        try {
+            const msg = typeof message === 'string' ? JSON.parse(message) : message;
+
+            switch (msg.action) {
                 case 'show_module':
-                    createOrUpdateModuleContainer(message.moduleId, message.title, message.content);
+                    createOrUpdateModuleContainer(msg.moduleId, msg.title, msg.content);
                     break;
                 case 'hide_module':
-                    hideModuleContainer(message.moduleId);
+                    hideModuleContainer(msg.moduleId);
                     break;
                 case 'update_module':
-                    updateModuleContent(message.moduleId, message.content);
+                    updateModuleContent(msg.moduleId, msg.content);
                     break;
                 case 'execute_script':
-                    executeScript(message.script);
+                    executeScript(msg.script);
                     break;
+                default:
+                    console.log('Unhandled message:', msg);
             }
+        } catch (e) {
+            console.error('Error handling native message:', e);
         }
+    }
 
-        // Show a module
-        function showModule(moduleId) {
-            // Tell native code to show module
-            sendToNative({
-                action: 'show_module',
-                moduleId: moduleId
-            });
-        }
+    // Show a module
+    function showModule(moduleId) {
+        // Tell native code to show module
+        sendMessage({
+            action: 'show_module',
+            moduleId: moduleId
+        });
+    }
 
-        // Create or update module container
-        function createOrUpdateModuleContainer(moduleId, title, content) {
-            let container = document.getElementById(`module-container-${moduleId}`);
+    // Create or update module container
+    function createOrUpdateModuleContainer(moduleId, title, content) {
+        let container = document.getElementById(`module-container-${moduleId}`);
 
-            if (!container) {
-                container = document.createElement('div');
-                container.id = `module-container-${moduleId}`;
-                container.className = 'module-container';
-                container.innerHTML = `
+        if (!container) {
+            container = document.createElement('div');
+            container.id = `module-container-${moduleId}`;
+            container.className = 'module-container';
+            container.innerHTML = `
                     <div class="module-header draggable">
                         <div class="module-title">${title}</div>
                         <div class="module-close" onclick="hideModuleContainer('${moduleId}')">×</div>
@@ -318,107 +337,123 @@
                     <div class="module-content" id="module-content-${moduleId}"></div>
                 `;
 
-                document.getElementById('module-containers').appendChild(container);
+            document.getElementById('module-containers').appendChild(container);
 
-                // Make draggable
-                makeDraggable(container);
-            }
-
-            // Update content
-            document.getElementById(`module-content-${moduleId}`).innerHTML = content;
-
-            // Show container
-            container.classList.add('active');
-
-            // Position if new
-            if (!container.style.top) {
-                container.style.top = '50px';
-                container.style.left = '50px';
-            }
+            // Make draggable
+            makeDraggable(container);
         }
 
-        // Hide module container
-        function hideModuleContainer(moduleId) {
-            const container = document.getElementById(`module-container-${moduleId}`);
-            if (container) {
-                container.classList.remove('active');
-
-                // Notify native code
-                sendToNative({
-                    action: 'module_closed',
-                    moduleId: moduleId
-                });
-            }
+        // Update content
+        const contentElement = document.getElementById(`module-content-${moduleId}`);
+        if (contentElement) {
+            contentElement.innerHTML = content;
         }
 
-        // Update module content
-        function updateModuleContent(moduleId, content) {
-            const contentElement = document.getElementById(`module-content-${moduleId}`);
-            if (contentElement) {
-                contentElement.innerHTML = content;
-            }
+        // Show container
+        container.classList.add('active');
+
+        // Position if new
+        if (!container.style.top) {
+            container.style.top = '50px';
+            container.style.left = '50px';
+        }
+    }
+
+    // Hide module container
+    function hideModuleContainer(moduleId) {
+        const container = document.getElementById(`module-container-${moduleId}`);
+        if (container) {
+            container.classList.remove('active');
+
+            // Notify native code
+            sendMessage({
+                action: 'module_closed',
+                moduleId: moduleId
+            });
+        }
+    }
+
+    // Update module content
+    function updateModuleContent(moduleId, content) {
+        const contentElement = document.getElementById(`module-content-${moduleId}`);
+        if (contentElement) {
+            contentElement.innerHTML = content;
+        }
+    }
+
+    // Make an element draggable
+    function makeDraggable(element) {
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+
+        const header = element.querySelector('.draggable');
+        if (!header) return;
+
+        header.onmousedown = dragMouseDown;
+
+        function dragMouseDown(e) {
+            e.preventDefault();
+
+            // Get the mouse cursor position at startup
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+
+            document.onmouseup = closeDragElement;
+            document.onmousemove = elementDrag;
         }
 
-        // Make an element draggable
-        function makeDraggable(element) {
-            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        function elementDrag(e) {
+            e.preventDefault();
 
-            const header = element.querySelector('.draggable');
-            if (!header) return;
+            // Calculate the new cursor position
+            pos1 = pos3 - e.clientX;
+            pos2 = pos4 - e.clientY;
+            pos3 = e.clientX;
+            pos4 = e.clientY;
 
-            header.onmousedown = dragMouseDown;
+            // Set the element's new position
+            const newTop = (element.offsetTop - pos2);
+            const newLeft = (element.offsetLeft - pos1);
 
-            function dragMouseDown(e) {
-                e.preventDefault();
+            // Boundary check
+            const maxTop = window.innerHeight - element.offsetHeight;
+            const maxLeft = window.innerWidth - element.offsetWidth;
 
-                // Get the mouse cursor position at startup
-                pos3 = e.clientX;
-                pos4 = e.clientY;
-
-                document.onmouseup = closeDragElement;
-                document.onmousemove = elementDrag;
-            }
-
-            function elementDrag(e) {
-                e.preventDefault();
-
-                // Calculate the new cursor position
-                pos1 = pos3 - e.clientX;
-                pos2 = pos4 - e.clientY;
-                pos3 = e.clientX;
-                pos4 = e.clientY;
-
-                // Set the element's new position
-                const newTop = (element.offsetTop - pos2);
-                const newLeft = (element.offsetLeft - pos1);
-
-                // Boundary check
-                const maxTop = window.innerHeight - element.offsetHeight;
-                const maxLeft = window.innerWidth - element.offsetWidth;
-
-                element.style.top = Math.min(Math.max(0, newTop), maxTop) + 'px';
-                element.style.left = Math.min(Math.max(0, newLeft), maxLeft) + 'px';
-            }
-
-            function closeDragElement() {
-                // Stop moving when mouse button is released
-                document.onmouseup = null;
-                document.onmousemove = null;
-            }
+            element.style.top = Math.min(Math.max(0, newTop), maxTop) + 'px';
+            element.style.left = Math.min(Math.max(0, newLeft), maxLeft) + 'px';
         }
 
-        // Execute script
-        function executeScript(script) {
-            try {
-                eval(script);
-            } catch (e) {
-                console.error('Error executing script:', e);
-            }
+        function closeDragElement() {
+            // Stop moving when mouse button is released
+            document.onmouseup = null;
+            document.onmousemove = null;
         }
+    }
 
-        // Send message to native code
-        function sendToNative(message) {
-            window.chrome.webview.postMessage(JSON.stringify(message));
-        }</script>
+    // Execute script
+    function executeScript(script) {
+        try {
+            eval(script);
+        } catch (e) {
+            console.error('Error executing script:', e);
+        }
+    }
+
+    // Listen for messages from C++ (CEF)
+    window.addEventListener('message', function(event) {
+        handleNativeMessage(event.data);
+    });
+
+    // Expose global function for C++ to call directly
+    window.handleNexileMessage = function(messageData) {
+        handleNativeMessage(messageData);
+    };
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeOverlay);
+    } else {
+        initializeOverlay();
+    }
+</script>
 </body>
 </html>
