@@ -103,6 +103,9 @@ namespace Nexile {
         // Idle timer thread function
         void IdleTimerThreadFunc();
 
+        // FIXED: Memory monitoring for C API optimization
+        void LogMemoryUsage(const std::string& context);
+
     private:
         // Static instance for window procedure
         static NexileApp* s_instance;

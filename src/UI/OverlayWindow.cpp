@@ -23,6 +23,10 @@
 
 namespace Nexile {
 
+    // FIXED: Initialize static members
+    std::unordered_map<void*, OverlayWindow*> OverlayWindow::s_handlerRegistry;
+    std::mutex OverlayWindow::s_registryMutex;
+
     namespace {
         void EnsureDirectoryExists(const std::wstring& path) {
             if (PathFileExistsW(path.c_str())) return;
@@ -57,7 +61,7 @@ namespace Nexile {
 
         base->release = [](cef_base_ref_counted_t* self) -> int {
             if (--self->ref_count == 0) {
-                free(self);  // Using free because we use calloc
+                delete[] reinterpret_cast<char*>(self);
                 return 1;
             }
             return 0;
@@ -72,20 +76,31 @@ namespace Nexile {
         };
     }
 
+    // FIXED: Helper to get context from extended handler structures
+    NexileHandlerContext* OverlayWindow::GetHandlerContext(void* handler_ptr) {
+        // Cast to the appropriate extended structure based on context
+        // This assumes we know which type of handler we're dealing with
+        // In practice, we can use the handler's function pointers to identify type
+        return nullptr; // Will be properly implemented in specific callbacks
+    }
+
     // ================== Constructor/Destructor ==================
     OverlayWindow::OverlayWindow(NexileApp* app)
         : m_app(app), m_hwnd(nullptr), m_visible(false), m_clickThrough(true),
           m_cefInitialized(false), m_browser(nullptr), m_client(nullptr),
           m_life_span_handler(nullptr), m_load_handler(nullptr), m_display_handler(nullptr),
           m_request_handler(nullptr), m_render_process_handler(nullptr), m_app_handler(nullptr),
-          m_clientData(nullptr), m_memoryOptimizationEnabled(true) {
+          m_context(nullptr), m_memoryOptimizationEnabled(true) {
 
         m_windowRect = {0, 0, 1280, 960};
-        m_clientData = new NexileClientData{this, "", 0, ""};
+
+        // FIXED: Create shared context
+        m_context = new NexileHandlerContext{this, "", 0, ""};
 
         LOG_INFO("Initializing Nexile Overlay with CEF C API");
         LogMemoryUsage("Pre-Init");
 
+        RegisterWindowClass();
         InitializeWindow();
         InitializeCEF();
 
@@ -108,14 +123,134 @@ namespace Nexile {
 
         if (m_hwnd) {
             DestroyWindow(m_hwnd);
+            m_hwnd = nullptr;
         }
 
         ReleaseCEFHandlers();
         ShutdownCEF();
 
-        delete m_clientData;
+        // FIXED: Clean up context
+        delete m_context;
+        m_context = nullptr;
 
         LogMemoryUsage("Post-Shutdown");
+    }
+
+    // ================== Window Management ==================
+    void OverlayWindow::RegisterWindowClass() {
+        WNDCLASSEXW wc = {};
+        wc.cbSize = sizeof(WNDCLASSEXW);
+        wc.style = CS_HREDRAW | CS_VREDRAW;
+        wc.lpfnWndProc = WindowProc;
+        wc.hInstance = m_app->GetInstanceHandle();
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)GetStockObject(NULL_BRUSH);
+        wc.lpszClassName = L"NexileOverlayWindow";
+
+        if (!RegisterClassExW(&wc)) {
+            throw std::runtime_error("Failed to register overlay window class");
+        }
+    }
+
+    void OverlayWindow::InitializeWindow() {
+        DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
+        DWORD style = WS_POPUP | WS_VISIBLE;
+
+        m_hwnd = CreateWindowExW(
+            exStyle,
+            L"NexileOverlayWindow",
+            L"Nexile Overlay",
+            style,
+            0, 0, 1280, 960,
+            nullptr, nullptr,
+            m_app->GetInstanceHandle(),
+            this
+        );
+
+        if (!m_hwnd) {
+            throw std::runtime_error("Failed to create overlay window");
+        }
+
+        SetLayeredWindowAttributes(m_hwnd, RGB(0, 0, 0), 200, LWA_ALPHA);
+        SetClickThrough(m_clickThrough);
+    }
+
+    LRESULT CALLBACK OverlayWindow::WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+        OverlayWindow* window = nullptr;
+
+        if (msg == WM_NCCREATE) {
+            CREATESTRUCT* cs = reinterpret_cast<CREATESTRUCT*>(lp);
+            window = static_cast<OverlayWindow*>(cs->lpCreateParams);
+            SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
+        } else {
+            window = reinterpret_cast<OverlayWindow*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+        }
+
+        if (window) {
+            return window->HandleMessage(hwnd, msg, wp, lp);
+        }
+
+        return DefWindowProc(hwnd, msg, wp, lp);
+    }
+
+    LRESULT OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+        switch (msg) {
+            case WM_SIZE: {
+                if (m_browser) {
+                    RECT rect;
+                    GetClientRect(hwnd, &rect);
+                    auto host = m_browser->get_host(m_browser);
+                    if (host) {
+                        host->was_resized(host);
+                        host->base.release((cef_base_ref_counted_t*)host);
+                    }
+                }
+                return 0;
+            }
+
+            case WM_CLOSE:
+                Hide();
+                return 0;
+
+            case WM_DESTROY:
+                return 0;
+
+            default:
+                return DefWindowProc(hwnd, msg, wp, lp);
+        }
+    }
+
+    void OverlayWindow::CenterWindow() {
+        if (!m_hwnd) return;
+
+        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        int x = (screenWidth - 1280) / 2;
+        int y = (screenHeight - 960) / 2;
+
+        SetWindowPos(m_hwnd, HWND_TOPMOST, x, y, 1280, 960, SWP_NOACTIVATE);
+    }
+
+    void OverlayWindow::SetPosition(const RECT& rect) {
+        m_windowRect = rect;
+        if (m_hwnd) {
+            SetWindowPos(m_hwnd, nullptr, rect.left, rect.top,
+                        rect.right - rect.left, rect.bottom - rect.top,
+                        SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+
+    void OverlayWindow::SetClickThrough(bool clickThrough) {
+        m_clickThrough = clickThrough;
+        if (m_hwnd) {
+            LONG_PTR exStyle = GetWindowLongPtr(m_hwnd, GWL_EXSTYLE);
+            if (clickThrough) {
+                exStyle |= WS_EX_TRANSPARENT;
+            } else {
+                exStyle &= ~WS_EX_TRANSPARENT;
+            }
+            SetWindowLongPtr(m_hwnd, GWL_EXSTYLE, exStyle);
+        }
     }
 
     // ================== CEF Initialization ==================
@@ -129,7 +264,7 @@ namespace Nexile {
             return; // This is a subprocess
         }
 
-        // Aggressive memory-constrained CEF settings
+        // CEF settings with memory optimization
         cef_settings_t settings = {};
         settings.size = sizeof(cef_settings_t);
         settings.no_sandbox = 1;
@@ -154,45 +289,16 @@ namespace Nexile {
         std::string locales_dir = Utils::CombinePath(Utils::GetModulePath(), "locales");
         cef_string_from_utf8(locales_dir.c_str(), locales_dir.length(), &settings.locales_dir_path);
 
-        // Ultra-aggressive memory optimization flags
-        std::string memoryFlags =
-            "--disable-gpu-compositing "
-            "--disable-gpu "
-            "--disable-software-rasterizer "
-            "--js-heap-size=67108864 "              // 64MB JS heap (minimum viable)
-            "--max-old-space-size=128 "             // 128MB V8 old space
-            "--disable-webgl --disable-webgl2 "
-            "--disable-3d-apis "
-            "--disable-accelerated-2d-canvas "
-            "--disable-dev-shm-usage "
-            "--memory-pressure-off "
-            "--max-active-webgl-contexts=0 "
-            "--force-device-scale-factor=1 "
-            "--disable-features=TranslateUI,AutofillServerCommunication "
-            "--disable-sync --disable-plugins --disable-extensions "
-            "--disable-background-networking "
-            "--enable-low-end-device-mode "
-            "--enable-low-res-tiling "
-            "--single-process "
-            "--disable-web-security "
-            "--renderer-process-limit=1 "
-            "--disable-hang-monitor "
-            "--disable-databases "
-            "--disable-local-storage "
-            "--disable-session-storage";
-
-        cef_string_from_utf8(memoryFlags.c_str(), memoryFlags.length(), &settings.command_line_args_disabled);
-
         CreateCEFHandlers();
 
-        if (!cef_initialize(&main_args, &settings, m_app_handler, nullptr)) {
+        if (!cef_initialize(&main_args, &settings, &m_app_handler->handler, nullptr)) {
             throw std::runtime_error("Failed to initialize CEF C API");
         }
 
         m_cefInitialized = true;
-        LOG_INFO("CEF C API initialized with aggressive memory constraints");
+        LOG_INFO("CEF C API initialized with memory constraints");
 
-        // Create browser with minimal settings
+        // Create browser
         cef_window_info_t windowInfo = {};
         windowInfo.style = WS_CHILD | WS_VISIBLE;
         windowInfo.parent_window = m_hwnd;
@@ -219,84 +325,116 @@ namespace Nexile {
         browserSettings.webgl = STATE_DISABLED;
         browserSettings.background_color = 0; // Transparent
 
-        // Minimal initial HTML
         cef_string_t url = {};
         std::string dataURL = "data:text/html;charset=utf-8,<html><body style='background:transparent;margin:0;padding:0;'></body></html>";
         cef_string_from_utf8(dataURL.c_str(), dataURL.length(), &url);
 
-        if (!cef_browser_host_create_browser(&windowInfo, m_client, &url, &browserSettings, nullptr, nullptr)) {
+        if (!cef_browser_host_create_browser(&windowInfo, &m_client->client, &url, &browserSettings, nullptr, nullptr)) {
             throw std::runtime_error("Failed to create CEF browser");
         }
 
         cef_string_clear(&url);
-        LOG_INFO("CEF browser creation initiated with memory constraints");
+        LOG_INFO("CEF browser creation initiated");
     }
 
     void OverlayWindow::CreateCEFHandlers() {
+        // FIXED: Create extended handlers with proper context embedding
+
         // Life Span Handler
-        m_life_span_handler = (cef_life_span_handler_t*)calloc(1, sizeof(cef_life_span_handler_t));
-        InitializeCefBase((cef_base_ref_counted_t*)m_life_span_handler, sizeof(cef_life_span_handler_t));
-        m_life_span_handler->on_after_created = OnAfterCreated;
-        m_life_span_handler->do_close = DoClose;
-        m_life_span_handler->on_before_close = OnBeforeClose;
+        m_life_span_handler = new NexileLifeSpanHandler;
+        memset(m_life_span_handler, 0, sizeof(NexileLifeSpanHandler));
+        InitializeCefBase((cef_base_ref_counted_t*)&m_life_span_handler->handler, sizeof(cef_life_span_handler_t));
+        m_life_span_handler->handler.on_after_created = OnAfterCreated;
+        m_life_span_handler->handler.do_close = DoClose;
+        m_life_span_handler->handler.on_before_close = OnBeforeClose;
+        m_life_span_handler->context = m_context;
 
         // Load Handler
-        m_load_handler = (cef_load_handler_t*)calloc(1, sizeof(cef_load_handler_t));
-        InitializeCefBase((cef_base_ref_counted_t*)m_load_handler, sizeof(cef_load_handler_t));
-        m_load_handler->on_load_start = OnLoadStart;
-        m_load_handler->on_load_end = OnLoadEnd;
-        m_load_handler->on_load_error = OnLoadError;
+        m_load_handler = new NexileLoadHandler;
+        memset(m_load_handler, 0, sizeof(NexileLoadHandler));
+        InitializeCefBase((cef_base_ref_counted_t*)&m_load_handler->handler, sizeof(cef_load_handler_t));
+        m_load_handler->handler.on_load_start = OnLoadStart;
+        m_load_handler->handler.on_load_end = OnLoadEnd;
+        m_load_handler->handler.on_load_error = OnLoadError;
+        m_load_handler->context = m_context;
 
         // Display Handler
-        m_display_handler = (cef_display_handler_t*)calloc(1, sizeof(cef_display_handler_t));
-        InitializeCefBase((cef_base_ref_counted_t*)m_display_handler, sizeof(cef_display_handler_t));
-        m_display_handler->on_title_change = OnTitleChange;
+        m_display_handler = new NexileDisplayHandler;
+        memset(m_display_handler, 0, sizeof(NexileDisplayHandler));
+        InitializeCefBase((cef_base_ref_counted_t*)&m_display_handler->handler, sizeof(cef_display_handler_t));
+        m_display_handler->handler.on_title_change = OnTitleChange;
+        m_display_handler->context = m_context;
 
         // Request Handler
-        m_request_handler = (cef_request_handler_t*)calloc(1, sizeof(cef_request_handler_t));
-        InitializeCefBase((cef_base_ref_counted_t*)m_request_handler, sizeof(cef_request_handler_t));
-        m_request_handler->get_resource_handler = GetResourceHandler;
+        m_request_handler = new NexileRequestHandler;
+        memset(m_request_handler, 0, sizeof(NexileRequestHandler));
+        InitializeCefBase((cef_base_ref_counted_t*)&m_request_handler->handler, sizeof(cef_request_handler_t));
+        m_request_handler->handler.get_resource_handler = GetResourceHandler;
+        m_request_handler->context = m_context;
 
         // Render Process Handler
-        m_render_process_handler = (cef_render_process_handler_t*)calloc(1, sizeof(cef_render_process_handler_t));
-        InitializeCefBase((cef_base_ref_counted_t*)m_render_process_handler, sizeof(cef_render_process_handler_t));
-        m_render_process_handler->on_context_created = OnContextCreated;
-        m_render_process_handler->on_process_message_received = OnProcessMessageReceived;
+        m_render_process_handler = new NexileRenderProcessHandler;
+        memset(m_render_process_handler, 0, sizeof(NexileRenderProcessHandler));
+        InitializeCefBase((cef_base_ref_counted_t*)&m_render_process_handler->handler, sizeof(cef_render_process_handler_t));
+        m_render_process_handler->handler.on_context_created = OnContextCreated;
+        m_render_process_handler->handler.on_process_message_received = OnProcessMessageReceived;
+        m_render_process_handler->context = m_context;
 
         // App Handler
-        m_app_handler = (cef_app_t*)calloc(1, sizeof(cef_app_t));
-        InitializeCefBase((cef_base_ref_counted_t*)m_app_handler, sizeof(cef_app_t));
-        m_app_handler->get_render_process_handler = GetRenderProcessHandler;
+        m_app_handler = new NexileAppHandler;
+        memset(m_app_handler, 0, sizeof(NexileAppHandler));
+        InitializeCefBase((cef_base_ref_counted_t*)&m_app_handler->handler, sizeof(cef_app_t));
+        m_app_handler->handler.get_render_process_handler = GetRenderProcessHandler;
+        m_app_handler->context = m_context;
 
-        // Client - CRITICAL: Store overlay pointer for callbacks
-        m_client = (cef_client_t*)calloc(1, sizeof(cef_client_t) + sizeof(NexileClientData));
-        InitializeCefBase((cef_base_ref_counted_t*)m_client, sizeof(cef_client_t));
+        // Client Handler
+        m_client = new NexileClient;
+        memset(m_client, 0, sizeof(NexileClient));
+        InitializeCefBase((cef_base_ref_counted_t*)&m_client->client, sizeof(cef_client_t));
+        m_client->client.get_life_span_handler = GetLifeSpanHandler;
+        m_client->client.get_load_handler = GetLoadHandler;
+        m_client->client.get_display_handler = GetDisplayHandler;
+        m_client->client.get_request_handler = GetRequestHandler;
+        m_client->context = m_context;
 
-        // Store our context data after the cef_client_t structure
-        NexileClientData* clientData = (NexileClientData*)((char*)m_client + sizeof(cef_client_t));
-        *clientData = *m_clientData;
-
-        m_client->get_life_span_handler = GetLifeSpanHandler;
-        m_client->get_load_handler = GetLoadHandler;
-        m_client->get_display_handler = GetDisplayHandler;
-        m_client->get_request_handler = GetRequestHandler;
+        // FIXED: Register handlers in global registry for cleanup tracking
+        std::lock_guard<std::mutex> lock(s_registryMutex);
+        s_handlerRegistry[m_life_span_handler] = this;
+        s_handlerRegistry[m_load_handler] = this;
+        s_handlerRegistry[m_display_handler] = this;
+        s_handlerRegistry[m_request_handler] = this;
+        s_handlerRegistry[m_render_process_handler] = this;
+        s_handlerRegistry[m_app_handler] = this;
+        s_handlerRegistry[m_client] = this;
     }
 
     void OverlayWindow::ReleaseCEFHandlers() {
-        auto releaseHandler = [](cef_base_ref_counted_t** handler) {
+        // FIXED: Unregister from global registry
+        {
+            std::lock_guard<std::mutex> lock(s_registryMutex);
+            s_handlerRegistry.erase(m_life_span_handler);
+            s_handlerRegistry.erase(m_load_handler);
+            s_handlerRegistry.erase(m_display_handler);
+            s_handlerRegistry.erase(m_request_handler);
+            s_handlerRegistry.erase(m_render_process_handler);
+            s_handlerRegistry.erase(m_app_handler);
+            s_handlerRegistry.erase(m_client);
+        }
+
+        auto releaseHandler = [](auto** handler) {
             if (*handler) {
-                (*handler)->release(*handler);
+                (*handler)->handler.base.release((cef_base_ref_counted_t*)&(*handler)->handler);
                 *handler = nullptr;
             }
         };
 
-        releaseHandler((cef_base_ref_counted_t**)&m_client);
-        releaseHandler((cef_base_ref_counted_t**)&m_life_span_handler);
-        releaseHandler((cef_base_ref_counted_t**)&m_load_handler);
-        releaseHandler((cef_base_ref_counted_t**)&m_display_handler);
-        releaseHandler((cef_base_ref_counted_t**)&m_request_handler);
-        releaseHandler((cef_base_ref_counted_t**)&m_render_process_handler);
-        releaseHandler((cef_base_ref_counted_t**)&m_app_handler);
+        releaseHandler(&m_client);
+        releaseHandler(&m_life_span_handler);
+        releaseHandler(&m_load_handler);
+        releaseHandler(&m_display_handler);
+        releaseHandler(&m_request_handler);
+        releaseHandler(&m_render_process_handler);
+        releaseHandler(&m_app_handler);
     }
 
     void OverlayWindow::ShutdownCEF() {
@@ -310,9 +448,10 @@ namespace Nexile {
     // ================== CEF Callback Implementations ==================
 
     void CEF_CALLBACK OverlayWindow::OnAfterCreated(cef_life_span_handler_t* self, cef_browser_t* browser) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_life_span_handler_t));
-        if (data && data->overlay) {
-            data->overlay->OnBrowserCreated(browser);
+        // FIXED: Get context from extended structure
+        NexileLifeSpanHandler* handler = reinterpret_cast<NexileLifeSpanHandler*>(self);
+        if (handler && handler->context && handler->context->overlay) {
+            handler->context->overlay->OnBrowserCreated(browser);
         }
     }
 
@@ -321,9 +460,9 @@ namespace Nexile {
     }
 
     void CEF_CALLBACK OverlayWindow::OnBeforeClose(cef_life_span_handler_t* self, cef_browser_t* browser) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_life_span_handler_t));
-        if (data && data->overlay) {
-            data->overlay->OnBrowserClosing();
+        NexileLifeSpanHandler* handler = reinterpret_cast<NexileLifeSpanHandler*>(self);
+        if (handler && handler->context && handler->context->overlay) {
+            handler->context->overlay->OnBrowserClosing();
         }
     }
 
@@ -339,7 +478,7 @@ namespace Nexile {
         if (frame && frame->is_main(frame)) {
             LOG_INFO("CEF load completed with status: {}", httpStatusCode);
 
-            // Inject minimal JavaScript bridge
+            // Inject JavaScript bridge
             cef_string_t script = {};
             std::string bridgeScript = R"(
                 window.nexile = window.nexile || {};
@@ -350,8 +489,11 @@ namespace Nexile {
                 };
                 window.chrome = window.chrome || {};
                 window.chrome.webview = {
-                    postMessage: function(data) { window.nexile.postMessage(data); }
+                    postMessage: function(data) {
+                        window.nexile.postMessage(data);
+                    }
                 };
+                console.log('Nexile bridge initialized');
             )";
 
             cef_string_from_utf8(bridgeScript.c_str(), bridgeScript.length(), &script);
@@ -385,15 +527,22 @@ namespace Nexile {
         cef_string_userfree_free(url_ptr);
 
         if (url.find("nexile://") == 0) {
-            auto* handler = (cef_resource_handler_t*)calloc(1, sizeof(cef_resource_handler_t) + sizeof(NexileClientData));
-            InitializeCefBase((cef_base_ref_counted_t*)handler, sizeof(cef_resource_handler_t));
+            // FIXED: Create resource handler with context
+            NexileRequestHandler* reqHandler = reinterpret_cast<NexileRequestHandler*>(self);
 
-            handler->process_request = ResourceProcessRequest;
-            handler->get_response_headers = ResourceGetResponseHeaders;
-            handler->read_response = ResourceReadResponse;
-            handler->cancel = ResourceCancel;
+            auto* resHandler = new NexileResourceHandler;
+            memset(resHandler, 0, sizeof(NexileResourceHandler));
+            InitializeCefBase((cef_base_ref_counted_t*)&resHandler->handler, sizeof(cef_resource_handler_t));
 
-            return handler;
+            resHandler->handler.process_request = ResourceProcessRequest;
+            resHandler->handler.get_response_headers = ResourceGetResponseHeaders;
+            resHandler->handler.read_response = ResourceReadResponse;
+            resHandler->handler.cancel = ResourceCancel;
+
+            // Share context
+            resHandler->context = reqHandler->context;
+
+            return &resHandler->handler;
         }
 
         return nullptr;
@@ -403,7 +552,8 @@ namespace Nexile {
 
     int CEF_CALLBACK OverlayWindow::ResourceProcessRequest(cef_resource_handler_t* self,
                                                           cef_request_t* request, cef_callback_t* callback) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_resource_handler_t));
+        NexileResourceHandler* handler = reinterpret_cast<NexileResourceHandler*>(self);
+        if (!handler || !handler->context) return 0;
 
         cef_string_userfree_t url_ptr = request->get_url(request);
         std::string url = CefStringToStdString(url_ptr);
@@ -414,17 +564,17 @@ namespace Nexile {
             filename = url.substr(9);
         }
 
-        // Load HTML content with memory efficiency
+        // Load HTML content
         std::string htmlPath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\" + filename);
         if (Utils::FileExists(htmlPath)) {
-            data->currentResourceData = Utils::ReadTextFile(htmlPath);
-            data->resourceMimeType = "text/html";
+            handler->context->currentResourceData = Utils::ReadTextFile(htmlPath);
+            handler->context->resourceMimeType = "text/html";
         } else {
-            data->currentResourceData = "<html><body><h1>404 Not Found</h1></body></html>";
-            data->resourceMimeType = "text/html";
+            handler->context->currentResourceData = "<html><body><h1>404 Not Found</h1></body></html>";
+            handler->context->resourceMimeType = "text/html";
         }
 
-        data->resourceOffset = 0;
+        handler->context->resourceOffset = 0;
         callback->cont(callback);
         return 1;
     }
@@ -432,28 +582,34 @@ namespace Nexile {
     void CEF_CALLBACK OverlayWindow::ResourceGetResponseHeaders(cef_resource_handler_t* self,
                                                                cef_response_t* response, int64* response_length,
                                                                cef_string_t* redirectUrl) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_resource_handler_t));
+        NexileResourceHandler* handler = reinterpret_cast<NexileResourceHandler*>(self);
+        if (!handler || !handler->context) return;
 
         cef_string_t mimeType = {};
-        cef_string_from_utf8(data->resourceMimeType.c_str(), data->resourceMimeType.length(), &mimeType);
+        cef_string_from_utf8(handler->context->resourceMimeType.c_str(),
+                           handler->context->resourceMimeType.length(), &mimeType);
         response->set_mime_type(response, &mimeType);
         cef_string_clear(&mimeType);
 
         response->set_status(response, 200);
-        *response_length = data->currentResourceData.length();
+        *response_length = handler->context->currentResourceData.length();
     }
 
     int CEF_CALLBACK OverlayWindow::ResourceReadResponse(cef_resource_handler_t* self, void* data_out,
                                                         int bytes_to_read, int* bytes_read,
                                                         cef_callback_t* callback) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_resource_handler_t));
+        NexileResourceHandler* handler = reinterpret_cast<NexileResourceHandler*>(self);
+        if (!handler || !handler->context) {
+            *bytes_read = 0;
+            return 0;
+        }
 
         *bytes_read = 0;
-        if (data->resourceOffset < data->currentResourceData.length()) {
+        if (handler->context->resourceOffset < handler->context->currentResourceData.length()) {
             int transfer_size = std::min(bytes_to_read,
-                                       static_cast<int>(data->currentResourceData.length() - data->resourceOffset));
-            memcpy(data_out, data->currentResourceData.c_str() + data->resourceOffset, transfer_size);
-            data->resourceOffset += transfer_size;
+                                       static_cast<int>(handler->context->currentResourceData.length() - handler->context->resourceOffset));
+            memcpy(data_out, handler->context->currentResourceData.c_str() + handler->context->resourceOffset, transfer_size);
+            handler->context->resourceOffset += transfer_size;
             *bytes_read = transfer_size;
             return 1;
         }
@@ -461,54 +617,62 @@ namespace Nexile {
     }
 
     void CEF_CALLBACK OverlayWindow::ResourceCancel(cef_resource_handler_t* self) {
-        // Clean up resource data to save memory
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_resource_handler_t));
-        data->currentResourceData.clear();
-        data->currentResourceData.shrink_to_fit();
+        NexileResourceHandler* handler = reinterpret_cast<NexileResourceHandler*>(self);
+        if (handler && handler->context) {
+            handler->context->currentResourceData.clear();
+            handler->context->currentResourceData.shrink_to_fit();
+        }
     }
 
     // ================== Client Handler Callbacks ==================
 
     cef_life_span_handler_t* CEF_CALLBACK OverlayWindow::GetLifeSpanHandler(cef_client_t* self) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_client_t));
-        if (data && data->overlay) {
-            data->overlay->m_life_span_handler->base.add_ref((cef_base_ref_counted_t*)data->overlay->m_life_span_handler);
-            return data->overlay->m_life_span_handler;
+        NexileClient* client = reinterpret_cast<NexileClient*>(self);
+        if (client && client->context && client->context->overlay) {
+            client->context->overlay->m_life_span_handler->handler.base.add_ref(
+                (cef_base_ref_counted_t*)&client->context->overlay->m_life_span_handler->handler);
+            return &client->context->overlay->m_life_span_handler->handler;
         }
         return nullptr;
     }
 
     cef_load_handler_t* CEF_CALLBACK OverlayWindow::GetLoadHandler(cef_client_t* self) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_client_t));
-        if (data && data->overlay) {
-            data->overlay->m_load_handler->base.add_ref((cef_base_ref_counted_t*)data->overlay->m_load_handler);
-            return data->overlay->m_load_handler;
+        NexileClient* client = reinterpret_cast<NexileClient*>(self);
+        if (client && client->context && client->context->overlay) {
+            client->context->overlay->m_load_handler->handler.base.add_ref(
+                (cef_base_ref_counted_t*)&client->context->overlay->m_load_handler->handler);
+            return &client->context->overlay->m_load_handler->handler;
         }
         return nullptr;
     }
 
     cef_display_handler_t* CEF_CALLBACK OverlayWindow::GetDisplayHandler(cef_client_t* self) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_client_t));
-        if (data && data->overlay) {
-            data->overlay->m_display_handler->base.add_ref((cef_base_ref_counted_t*)data->overlay->m_display_handler);
-            return data->overlay->m_display_handler;
+        NexileClient* client = reinterpret_cast<NexileClient*>(self);
+        if (client && client->context && client->context->overlay) {
+            client->context->overlay->m_display_handler->handler.base.add_ref(
+                (cef_base_ref_counted_t*)&client->context->overlay->m_display_handler->handler);
+            return &client->context->overlay->m_display_handler->handler;
         }
         return nullptr;
     }
 
     cef_request_handler_t* CEF_CALLBACK OverlayWindow::GetRequestHandler(cef_client_t* self) {
-        NexileClientData* data = (NexileClientData*)((char*)self + sizeof(cef_client_t));
-        if (data && data->overlay) {
-            data->overlay->m_request_handler->base.add_ref((cef_base_ref_counted_t*)data->overlay->m_request_handler);
-            return data->overlay->m_request_handler;
+        NexileClient* client = reinterpret_cast<NexileClient*>(self);
+        if (client && client->context && client->context->overlay) {
+            client->context->overlay->m_request_handler->handler.base.add_ref(
+                (cef_base_ref_counted_t*)&client->context->overlay->m_request_handler->handler);
+            return &client->context->overlay->m_request_handler->handler;
         }
         return nullptr;
     }
 
     cef_render_process_handler_t* CEF_CALLBACK OverlayWindow::GetRenderProcessHandler(cef_app_t* self) {
-        // Access overlay through global context or similar mechanism
-        // For simplicity, we'll return nullptr here as render process handling
-        // is less critical for basic overlay functionality
+        NexileAppHandler* appHandler = reinterpret_cast<NexileAppHandler*>(self);
+        if (appHandler && appHandler->context && appHandler->context->overlay) {
+            appHandler->context->overlay->m_render_process_handler->handler.base.add_ref(
+                (cef_base_ref_counted_t*)&appHandler->context->overlay->m_render_process_handler->handler);
+            return &appHandler->context->overlay->m_render_process_handler->handler;
+        }
         return nullptr;
     }
 
@@ -517,17 +681,21 @@ namespace Nexile {
     void CEF_CALLBACK OverlayWindow::OnContextCreated(cef_render_process_handler_t* self,
                                                      cef_browser_t* browser, cef_frame_t* frame,
                                                      cef_v8context_t* context) {
-        // Create minimal JavaScript bridge
+        // Create JavaScript bridge
         cef_v8value_t* window = context->get_global(context);
         cef_v8value_t* nexileBridge = cef_v8value_create_object(nullptr, nullptr);
 
-        cef_v8handler_t* handler = (cef_v8handler_t*)calloc(1, sizeof(cef_v8handler_t));
-        InitializeCefBase((cef_base_ref_counted_t*)handler, sizeof(cef_v8handler_t));
-        handler->execute = V8Execute;
+        auto* v8Handler = new NexileV8Handler;
+        memset(v8Handler, 0, sizeof(NexileV8Handler));
+        InitializeCefBase((cef_base_ref_counted_t*)&v8Handler->handler, sizeof(cef_v8handler_t));
+        v8Handler->handler.execute = V8Execute;
+
+        NexileRenderProcessHandler* renderHandler = reinterpret_cast<NexileRenderProcessHandler*>(self);
+        v8Handler->context = renderHandler->context;
 
         cef_string_t funcName = {};
         cef_string_from_utf8("postMessage", 11, &funcName);
-        cef_v8value_t* postMessageFunc = cef_v8value_create_function(&funcName, handler);
+        cef_v8value_t* postMessageFunc = cef_v8value_create_function(&funcName, &v8Handler->handler);
         cef_string_clear(&funcName);
 
         cef_string_t bridgeProperty = {};
@@ -544,7 +712,6 @@ namespace Nexile {
         postMessageFunc->base.release((cef_base_ref_counted_t*)postMessageFunc);
         nexileBridge->base.release((cef_base_ref_counted_t*)nexileBridge);
         window->base.release((cef_base_ref_counted_t*)window);
-        handler->base.release((cef_base_ref_counted_t*)handler);
     }
 
     int CEF_CALLBACK OverlayWindow::OnProcessMessageReceived(cef_render_process_handler_t* self,
@@ -555,18 +722,19 @@ namespace Nexile {
         std::string name = CefStringToStdString(name_ptr);
         cef_string_userfree_free(name_ptr);
 
-        if (name == "nexile_execute_script") {
+        if (name == "nexile_message") {
             cef_list_value_t* args = message->get_argument_list(message);
             if (args->get_size(args) > 0) {
-                cef_string_userfree_t script_ptr = args->get_string(args, 0);
-                std::string script = CefStringToStdString(script_ptr);
-                cef_string_userfree_free(script_ptr);
+                cef_string_userfree_t msg_ptr = args->get_string(args, 0);
+                std::string msg = CefStringToStdString(msg_ptr);
+                cef_string_userfree_free(msg_ptr);
 
-                cef_string_t scriptStr = {};
-                cef_string_from_utf8(script.c_str(), script.length(), &scriptStr);
-                cef_string_t url = {};
-                frame->execute_java_script(frame, &scriptStr, &url, 0);
-                cef_string_clear(&scriptStr);
+                // Handle message in overlay
+                NexileRenderProcessHandler* handler = reinterpret_cast<NexileRenderProcessHandler*>(self);
+                if (handler && handler->context && handler->context->overlay) {
+                    std::wstring wmsg = Utils::StringToWideString(msg);
+                    handler->context->overlay->HandleWebMessage(wmsg);
+                }
 
                 args->base.release((cef_base_ref_counted_t*)args);
                 return 1;
@@ -693,8 +861,6 @@ namespace Nexile {
         LOG_INFO("CEF browser closed via C API");
     }
 
-    // ================== Window Management (unchanged) ==================
-
     void OverlayWindow::Show() {
         if (!m_hwnd) {
             LOG_ERROR("Cannot show overlay: window not initialized");
@@ -717,31 +883,73 @@ namespace Nexile {
         m_visible = false;
         ShowWindow(m_hwnd, SW_HIDE);
 
-        // Aggressive memory cleanup on hide
+        // Memory cleanup on hide
         if (m_memoryOptimizationEnabled) {
             ExecuteScript(L"if(window.gc) window.gc();");
-            // Force CEF cleanup
-            if (m_browser) {
-                auto frame = m_browser->get_main_frame(m_browser);
-                if (frame) {
-                    // Navigate to minimal page to free memory
-                    cef_string_t minimalUrl = {};
-                    std::string minimal = "data:text/html,<html><body style='background:transparent;'></body></html>";
-                    cef_string_from_utf8(minimal.c_str(), minimal.length(), &minimalUrl);
-                    frame->load_url(frame, &minimalUrl);
-                    cef_string_clear(&minimalUrl);
-                    frame->base.release((cef_base_ref_counted_t*)frame);
-                }
-            }
         }
 
         LOG_INFO("Overlay window hidden");
         LogMemoryUsage("Window-Hidden");
     }
 
-    // Additional implementation continues...
-    // [RegisterWindowClass, InitializeWindow, CenterWindow, SetPosition, etc.]
-    // [LoadWelcomePage, LoadBrowserPage, LoadModuleUI, etc.]
-    // [All the remaining window management and UI loading methods]
+    // ================== Helper Functions ==================
+
+    std::string OverlayWindow::LoadHTMLResource(const std::string& filename) {
+        std::string htmlPath = Utils::CombinePath(Utils::GetModulePath(), "HTML\\" + filename);
+        if (Utils::FileExists(htmlPath)) {
+            return Utils::ReadTextFile(htmlPath);
+        }
+        return "";
+    }
+
+    std::string OverlayWindow::CreateDataURL(const std::string& html) {
+        return "data:text/html;charset=utf-8," + html;
+    }
+
+    void OverlayWindow::RegisterWebMessageCallback(WebMessageCallback cb) {
+        std::lock_guard<std::mutex> lock(m_callbackMutex);
+        m_webMessageCallbacks.push_back(cb);
+    }
+
+    void OverlayWindow::HandleWebMessage(const std::wstring& message) {
+        std::lock_guard<std::mutex> lock(m_callbackMutex);
+        for (auto& callback : m_webMessageCallbacks) {
+            try {
+                callback(message);
+            } catch (const std::exception& e) {
+                LOG_ERROR("Error in web message callback: {}", e.what());
+            }
+        }
+    }
+
+    void OverlayWindow::LoadWelcomePage() {
+        Navigate(L"nexile://welcome.html");
+    }
+
+    void OverlayWindow::LoadBrowserPage() {
+        Navigate(L"nexile://browser.html");
+    }
+
+    void OverlayWindow::LoadMainOverlayUI() {
+        Navigate(L"nexile://main_overlay.html");
+    }
+
+    void OverlayWindow::LoadModuleUI(const std::shared_ptr<IModule>& module) {
+        if (!module) return;
+
+        std::string moduleId = module->GetModuleID();
+        if (moduleId == "price_check") {
+            Navigate(L"nexile://price_check_module.html");
+        } else if (moduleId == "settings") {
+            Navigate(L"nexile://settings.html");
+        } else {
+            // Use module's HTML content
+            std::string html = module->GetModuleUIHTML();
+            if (!html.empty()) {
+                std::string dataURL = CreateDataURL(html);
+                Navigate(Utils::StringToWideString(dataURL));
+            }
+        }
+    }
 
 } // namespace Nexile

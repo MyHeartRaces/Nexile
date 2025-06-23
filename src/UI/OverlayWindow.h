@@ -6,6 +6,7 @@
 #include <vector>
 #include <mutex>
 #include <memory>
+#include <unordered_map>
 
 // CEF C API includes - CRITICAL CHANGE: Different include structure
 #include "include/capi/cef_app_capi.h"
@@ -29,12 +30,58 @@ namespace Nexile {
 
     using WebMessageCallback = std::function<void(const std::wstring&)>;
 
-    // Data structures for C API callback context
-    struct NexileClientData {
+    // FIXED: Proper context structure with embedded OverlayWindow pointer
+    struct NexileHandlerContext {
         class OverlayWindow* overlay;
         std::string currentResourceData;
         size_t resourceOffset;
         std::string resourceMimeType;
+    };
+
+    // FIXED: Extended handler structures with embedded context
+    struct NexileLifeSpanHandler {
+        cef_life_span_handler_t handler;
+        NexileHandlerContext* context;
+    };
+
+    struct NexileLoadHandler {
+        cef_load_handler_t handler;
+        NexileHandlerContext* context;
+    };
+
+    struct NexileDisplayHandler {
+        cef_display_handler_t handler;
+        NexileHandlerContext* context;
+    };
+
+    struct NexileRequestHandler {
+        cef_request_handler_t handler;
+        NexileHandlerContext* context;
+    };
+
+    struct NexileResourceHandler {
+        cef_resource_handler_t handler;
+        NexileHandlerContext* context;
+    };
+
+    struct NexileRenderProcessHandler {
+        cef_render_process_handler_t handler;
+        NexileHandlerContext* context;
+    };
+
+    struct NexileAppHandler {
+        cef_app_t handler;
+        NexileHandlerContext* context;
+    };
+
+    struct NexileClient {
+        cef_client_t client;
+        NexileHandlerContext* context;
+    };
+
+    struct NexileV8Handler {
+        cef_v8handler_t handler;
+        NexileHandlerContext* context;
     };
 
     class OverlayWindow {
@@ -42,7 +89,7 @@ namespace Nexile {
         explicit OverlayWindow(NexileApp* app);
         ~OverlayWindow();
 
-        // ================== Public API (unchanged) ==================
+        // ================== Public API ==================
         void Show();
         void Hide();
         void SetPosition(const RECT& rect);
@@ -57,7 +104,7 @@ namespace Nexile {
         void CenterWindow();
         bool GetClickThrough() const { return m_clickThrough; }
 
-        // ================== CEF C API Integration ==================
+        // ================== CEF Integration ==================
         void HandleWebMessage(const std::wstring& message);
         void OnBrowserCreated(cef_browser_t* browser);
         void OnBrowserClosing();
@@ -130,7 +177,7 @@ namespace Nexile {
         void RegisterWindowClass();
         void InitializeWindow();
 
-        // ================== CEF C API Management ==================
+        // ================== CEF Management ==================
         void InitializeCEF();
         void ShutdownCEF();
         void CreateCEFHandlers();
@@ -148,6 +195,9 @@ namespace Nexile {
         // CEF Reference Counting Helper
         static void InitializeCefBase(cef_base_ref_counted_t* base, size_t size);
 
+        // Context helper
+        static NexileHandlerContext* GetHandlerContext(void* handler_ptr);
+
         // ================== Member Variables ==================
 
         // Core application
@@ -157,18 +207,18 @@ namespace Nexile {
         bool m_clickThrough;
         bool m_cefInitialized;
 
-        // CEF C API structures - MAJOR CHANGE: Direct C structs
+        // CEF C API structures - FIXED: Using extended structures
         cef_browser_t* m_browser;
-        cef_client_t* m_client;
-        cef_life_span_handler_t* m_life_span_handler;
-        cef_load_handler_t* m_load_handler;
-        cef_display_handler_t* m_display_handler;
-        cef_request_handler_t* m_request_handler;
-        cef_render_process_handler_t* m_render_process_handler;
-        cef_app_t* m_app_handler;
+        NexileClient* m_client;
+        NexileLifeSpanHandler* m_life_span_handler;
+        NexileLoadHandler* m_load_handler;
+        NexileDisplayHandler* m_display_handler;
+        NexileRequestHandler* m_request_handler;
+        NexileRenderProcessHandler* m_render_process_handler;
+        NexileAppHandler* m_app_handler;
 
-        // Callback context data
-        NexileClientData* m_clientData;
+        // Context data - FIXED: Single context shared by all handlers
+        NexileHandlerContext* m_context;
 
         // Message handling
         std::mutex m_callbackMutex;
@@ -180,8 +230,9 @@ namespace Nexile {
         // Memory optimization flag
         bool m_memoryOptimizationEnabled;
 
-        // Resource tracking for memory management
-        std::vector<cef_base_ref_counted_t*> m_cefResources;
+        // Global handler registry for cleanup tracking
+        static std::unordered_map<void*, OverlayWindow*> s_handlerRegistry;
+        static std::mutex s_registryMutex;
     };
 
 } // namespace Nexile
