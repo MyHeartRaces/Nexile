@@ -8,24 +8,27 @@
 #include <include/cef_browser.h>
 #include <include/cef_command_line.h>
 #include <include/wrapper/cef_helpers.h>
+#include <include/cef_sandbox_win.h>
 
-// Entry point for Windows application
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // Enable console for debugging (can be removed in release)
-#ifdef _DEBUG
-    AllocConsole();
-    FILE* dummy;
-    freopen_s(&dummy, "CONOUT$", "w", stdout);
-    freopen_s(&dummy, "CONOUT$", "w", stderr);
-#endif
 
-    // CEF expects main args
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+                   LPSTR lpCmdLine, int nCmdShow) {
+    // Enable heap corruption detection
+    HeapSetInformation(NULL, HeapEnableTerminationOnCorruption, NULL, 0);
+
+    // CEF main args
     CefMainArgs main_args(hInstance);
 
+    // Optional: Use sandbox for better isolation
+    void* sandbox_info = nullptr;
+#if defined(CEF_USE_SANDBOX)
+    CefScopedSandboxInfo scoped_sandbox;
+    sandbox_info = scoped_sandbox.sandbox_info();
+#endif
+
     // Check if this is a subprocess
-    int exit_code = CefExecuteProcess(main_args, nullptr, nullptr);
+    int exit_code = CefExecuteProcess(main_args, nullptr, sandbox_info);
     if (exit_code >= 0) {
-        // This was a subprocess, exit
         return exit_code;
     }
 

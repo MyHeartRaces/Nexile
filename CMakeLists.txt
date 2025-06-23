@@ -16,48 +16,38 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 # -----------------------------------------------------------------------------
 # CEF Configuration
 # -----------------------------------------------------------------------------
-# Set CEF root directory - adjust this path to where you've extracted CEF
+# Set CEF root directory
 set(CEF_ROOT "${CMAKE_SOURCE_DIR}/third_party/cef")
 
-# Determine the platform
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(CEF_PLATFORM "windows64")
-else()
-    set(CEF_PLATFORM "windows32")
-endif()
-
-# CEF directories
-set(CEF_BINARY_DIR "${CEF_ROOT}/${CEF_PLATFORM}")
+# Update these paths to point to your actual CEF files
+set(CEF_BINARY_DIR "${CEF_ROOT}/Release")
+set(CEF_WRAPPER_DIR "${CEF_ROOT}/build/libcef_dll_wrapper/Release")
 set(CEF_RESOURCE_DIR "${CEF_ROOT}/Resources")
-set(CEF_INCLUDE_DIR "${CEF_ROOT}")
+set(CEF_INCLUDE_DIR "${CEF_ROOT}/include")
 
-# Check if CEF exists
+# Check if CEF directories exist
 if(NOT EXISTS ${CEF_BINARY_DIR})
     message(FATAL_ERROR "CEF binary directory not found: ${CEF_BINARY_DIR}")
+endif()
+
+if(NOT EXISTS ${CEF_WRAPPER_DIR})
+    message(FATAL_ERROR "CEF wrapper directory not found: ${CEF_WRAPPER_DIR}")
 endif()
 
 # Add CEF include directory
 include_directories(${CEF_INCLUDE_DIR})
 
-# Find CEF libraries
-find_library(CEF_LIBRARY
-        NAMES libcef
-        PATHS ${CEF_BINARY_DIR}
-        NO_DEFAULT_PATH
-)
+# Find CEF libraries with explicit paths
+set(CEF_LIBRARY "${CEF_BINARY_DIR}/libcef.lib")
+set(CEF_WRAPPER_LIBRARY "${CEF_WRAPPER_DIR}/libcef_dll_wrapper.lib")
 
-find_library(CEF_WRAPPER_LIBRARY
-        NAMES libcef_dll_wrapper
-        PATHS ${CEF_BINARY_DIR}
-        NO_DEFAULT_PATH
-)
-
-if(NOT CEF_LIBRARY)
-    message(FATAL_ERROR "CEF library not found")
+# Check if libraries exist
+if(NOT EXISTS ${CEF_LIBRARY})
+    message(FATAL_ERROR "CEF library not found at: ${CEF_LIBRARY}")
 endif()
 
-if(NOT CEF_WRAPPER_LIBRARY)
-    message(FATAL_ERROR "CEF wrapper library not found")
+if(NOT EXISTS ${CEF_WRAPPER_LIBRARY})
+    message(FATAL_ERROR "CEF wrapper library not found at: ${CEF_WRAPPER_LIBRARY}")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -162,6 +152,21 @@ add_custom_command(TARGET Nexile POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CEF_BINARY_DIR}/vulkan-1.dll"
         "$<TARGET_FILE_DIR:Nexile>")
+
+# Add commands for .pak and .dat files that typically come with CEF
+foreach(CEF_RESOURCE_FILE
+        "cef.pak"
+        "cef_100_percent.pak"
+        "cef_200_percent.pak"
+        "devtools_resources.pak"
+        "icudtl.dat")
+    add_custom_command(TARGET Nexile POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CEF_BINARY_DIR}/${CEF_RESOURCE_FILE}"
+            "$<TARGET_FILE_DIR:Nexile>"
+            COMMENT "Copying ${CEF_RESOURCE_FILE}"
+            VERBATIM)
+endforeach()
 
 # 2) Copy CEF resources
 add_custom_command(TARGET Nexile POST_BUILD

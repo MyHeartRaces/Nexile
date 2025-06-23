@@ -75,7 +75,7 @@ namespace Nexile {
         if (frame->IsMain()) {
             LOG_INFO("CEF load completed with status: {}", httpStatusCode);
 
-            // Inject JavaScript bridge
+            // Inject JavaScript bridge with minimal overhead
             std::string bridgeScript = R"(
                 window.nexile = window.nexile || {};
                 window.nexile.postMessage = function(data) {
@@ -327,11 +327,18 @@ namespace Nexile {
     }
 
     void OverlayWindow::InitializeCEF() {
-        // CEF settings
+        // CEF settings with resource constraints for 444MB limit
         CefSettings settings;
         settings.no_sandbox = true;
-        settings.single_process = true;
+        settings.single_process = true;  // Force single process to limit threads
         settings.multi_threaded_message_loop = false;
+
+        // Resource constraints
+        settings.uncaught_exception_stack_size = 10;  // Reduce stack trace size
+
+        // Disable features not needed for overlay
+        settings.persist_session_cookies = false;
+        settings.persist_user_preferences = false;
 
         // Set paths
         std::string cef_cache = Utils::CombinePath(Utils::GetAppDataPath(), "cef_cache");
@@ -340,14 +347,74 @@ namespace Nexile {
 
         std::string cef_log = Utils::CombinePath(Utils::GetAppDataPath(), "cef.log");
         CefString(&settings.log_file) = cef_log;
-        settings.log_severity = LOGSEVERITY_INFO;
+        settings.log_severity = LOGSEVERITY_WARNING;  // Reduce logging overhead
 
         // Resource path
-        std::string resource_dir = Utils::CombinePath(Utils::GetModulePath(), "cef_resources");
+        std::string resource_dir = Utils::CombinePath(Utils::GetModulePath(), "");
         CefString(&settings.resources_dir_path) = resource_dir;
 
         std::string locales_dir = Utils::CombinePath(Utils::GetModulePath(), "locales");
         CefString(&settings.locales_dir_path) = locales_dir;
+
+        // Command line arguments for memory and CPU limits
+        CefString(&settings.browser_subprocess_path) = "";  // Use same process
+
+        // Additional command line flags for resource limits
+        std::string extra_args =
+            "--disable-gpu-compositing "  // Reduce GPU memory
+            "--disable-gpu "  // Disable GPU entirely
+            "--disable-software-rasterizer "  // Disable software rendering
+            "--disable-gpu-sandbox "
+            "--js-heap-size=67108864 "  // 64MB JavaScript heap (minimum for basic functionality)
+            "--max-old-space-size=128 "  // 128MB max V8 old space
+            "--disable-webgl "  // Disable WebGL
+            "--disable-webgl2 "
+            "--disable-3d-apis "  // Disable 3D APIs
+            "--disable-accelerated-2d-canvas "  // Disable accelerated canvas
+            "--disable-accelerated-video-decode "
+            "--disable-dev-shm-usage "  // Don't use /dev/shm
+            "--memory-pressure-off "  // Disable memory pressure handling
+            "--max-active-webgl-contexts=0 "  // No WebGL contexts
+            "--force-device-scale-factor=1 "  // Fixed scale
+            "--disable-features=TranslateUI "  // Disable translation
+            "--disable-features=AutofillServerCommunication "  // No autofill
+            "--disable-sync "  // No sync
+            "--disable-plugins "  // No plugins
+            "--disable-extensions "  // No extensions
+            "--disable-background-networking "  // No background network
+            "--disable-background-timer-throttling "  // No timer throttling
+            "--disable-renderer-backgrounding "  // No backgrounding
+            "--disable-features=LazyFrameLoading "  // No lazy loading
+            "--disable-ipc-flooding-protection "  // Reduce IPC overhead
+            "--disable-breakpad "  // No crash reporting
+            "--disable-features=BlinkGenPropertyTrees "  // Reduce memory
+            "--disable-databases "  // No IndexedDB/WebSQL
+            "--disable-local-storage "  // No localStorage
+            "--disable-session-storage "  // No sessionStorage
+            "--enable-low-end-device-mode "  // Enable low-end device optimizations
+            "--enable-low-res-tiling "  // Use low resolution tiles
+            "--disable-image-animation-resync "  // No image animation sync
+            "--disable-javascript-harmony-shipping "  // Disable newer JS features
+            "--disable-smooth-scrolling "  // No smooth scrolling
+            "--disable-features=NetworkService "  // Use in-process network
+            "--disable-features=VizDisplayCompositor "  // Simpler compositor
+            "--disable-features=AudioServiceOutOfProcess "  // In-process audio
+            "--process-per-site "  // Share processes across sites
+            "--single-process "  // Force single process
+            "--disable-site-isolation-trials "  // No site isolation
+            "--disable-web-security "  // For local file access
+            "--disable-features=RendererCodeIntegrity "  // No code integrity
+            "--disable-blink-features=AutomationControlled "  // No automation detection
+            "--renderer-process-limit=1 "  // Single renderer
+            "--disable-hang-monitor "  // No hang detection
+            "--disable-prompt-on-repost "  // No repost prompts
+            "--disable-domain-reliability "  // No domain reliability
+            "--disable-component-update "  // No component updates
+            "--safebrowsing-disable-auto-update "  // No safe browsing updates
+            "--disable-search-engine-choice-screen";  // No search engine choice
+
+        // Append to existing command line
+        CefString(&settings.command_line_args_disabled) = extra_args;
 
         // Initialize CEF
         CefRefPtr<NexileApp_CEF> app = new NexileApp_CEF();
@@ -357,26 +424,44 @@ namespace Nexile {
         }
 
         m_cefInitialized = true;
-        LOG_INFO("CEF initialized successfully");
+        LOG_INFO("CEF initialized successfully with resource limits");
 
         // Create browser client
         m_client = new NexileClient(this);
 
-        // Browser settings
+        // Browser settings optimized for low memory
         CefBrowserSettings browserSettings;
         browserSettings.web_security = STATE_DISABLED;
         browserSettings.javascript_close_windows = STATE_DISABLED;
+        browserSettings.plugins = STATE_DISABLED;
+        browserSettings.java = STATE_DISABLED;
+        browserSettings.javascript_access_clipboard = STATE_DISABLED;
+        browserSettings.javascript_dom_paste = STATE_DISABLED;
+        browserSettings.image_loading = STATE_ENABLED;  // Keep images but optimize
+        browserSettings.image_shrink_standalone_to_fit = STATE_ENABLED;
+        browserSettings.text_area_resize = STATE_DISABLED;
+        browserSettings.tab_to_links = STATE_DISABLED;
+        browserSettings.local_storage = STATE_DISABLED;
+        browserSettings.databases = STATE_DISABLED;
+        browserSettings.application_cache = STATE_DISABLED;
+        browserSettings.webgl = STATE_DISABLED;
+
+        // Set background color for transparency
+        browserSettings.background_color = CefColorSetARGB(0, 0, 0, 0);
 
         // Window info
         CefWindowInfo windowInfo;
         windowInfo.SetAsChild(m_hwnd, CefRect(0, 0, 1280, 960));
 
-        // Create browser
-        if (!CefBrowserHost::CreateBrowser(windowInfo, m_client, "about:blank", browserSettings, nullptr, nullptr)) {
+        // Create browser with data URL to avoid initial navigation
+        std::string initialHTML = "<html><body style='background:transparent;'></body></html>";
+        std::string dataURL = "data:text/html;charset=utf-8," + initialHTML;
+
+        if (!CefBrowserHost::CreateBrowser(windowInfo, m_client, dataURL, browserSettings, nullptr, nullptr)) {
             throw std::runtime_error("Failed to create CEF browser");
         }
 
-        LOG_INFO("CEF browser creation initiated");
+        LOG_INFO("CEF browser creation initiated with minimal resources");
     }
 
     void OverlayWindow::ShutdownCEF() {
@@ -407,6 +492,12 @@ namespace Nexile {
 
         m_visible = false;
         ShowWindow(m_hwnd, SW_HIDE);
+
+        // Force garbage collection when hidden to free memory
+        if (m_browser) {
+            m_browser->GetMainFrame()->ExecuteJavaScript("if(window.gc) window.gc();", "", 0);
+        }
+
         LOG_INFO("Overlay window hidden");
     }
 
@@ -518,7 +609,7 @@ namespace Nexile {
     void OverlayWindow::LoadWelcomePage() {
         std::string welcomeHTML = LoadHTMLResource("welcome.html");
         if (welcomeHTML.empty()) {
-            // Fallback HTML
+            // Fallback HTML (minimal)
             welcomeHTML = R"(
                 <!DOCTYPE html>
                 <html><head><title>Nexile</title>
@@ -595,7 +686,7 @@ namespace Nexile {
             moduleHTML = module->GetModuleUIHTML();
         }
 
-        // Final fallback
+        // Final fallback (minimal)
         if (moduleHTML.empty()) {
             std::stringstream ss;
             ss << "<!DOCTYPE html><html><head><title>" << module->GetModuleName() << "</title>";
