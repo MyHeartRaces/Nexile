@@ -1,18 +1,18 @@
 #pragma once
 
 #include <Windows.h>
-#include <include/cef_app.h>
-#include <include/cef_client.h>
-#include <include/cef_browser.h>
-#include <include/cef_frame.h>
-#include <include/cef_render_handler.h>
-#include <include/cef_load_handler.h>
-#include <include/cef_display_handler.h>
-#include <include/cef_life_span_handler.h>
-#include <include/cef_request_handler.h>
-#include <include/cef_resource_handler.h>
-#include <include/cef_scheme.h>
-#include <include/wrapper/cef_helpers.h>
+#include <cef_app.h>
+#include <cef_client.h>
+#include <cef_browser.h>
+#include <cef_frame.h>
+#include <cef_render_handler.h>
+#include <cef_load_handler.h>
+#include <cef_display_handler.h>
+#include <cef_life_span_handler.h>
+#include <cef_request_handler.h>
+#include <cef_resource_handler.h>
+#include <cef_scheme.h>
+#include <wrapper/cef_helpers.h>
 
 #include <string>
 #include <functional>
