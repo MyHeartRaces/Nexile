@@ -13,6 +13,7 @@ _build/
 cmake-build-*/
 out/
 third_party/
+.idea/
 
 # Visual Studio 2022 cache/options directory
 .vs/
