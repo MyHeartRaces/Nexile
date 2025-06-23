@@ -34,8 +34,8 @@ if(NOT EXISTS ${CEF_WRAPPER_DIR})
     message(FATAL_ERROR "CEF wrapper directory not found: ${CEF_WRAPPER_DIR}")
 endif()
 
-# Add CEF include directory
-include_directories(${CEF_INCLUDE_DIR})
+# Add CEF include directory - CEF expects the root directory, not include/
+include_directories(${CEF_ROOT})
 
 # Find CEF libraries with explicit paths
 set(CEF_LIBRARY "${CEF_BINARY_DIR}/libcef.lib")
@@ -51,25 +51,9 @@ if(NOT EXISTS ${CEF_WRAPPER_LIBRARY})
 endif()
 
 # -----------------------------------------------------------------------------
-# nlohmann/json – first try vcpkg, then fallback to FindNlohmannJson module
+# nlohmann/json
 # -----------------------------------------------------------------------------
-if(DEFINED ENV{VCPKG_ROOT} OR DEFINED VCPKG_TARGET_TRIPLET)
-    find_package(nlohmann_json CONFIG)
-endif()
-
-if(NOT nlohmann_json_FOUND)
-    find_package(NlohmannJson)
-    if(NlohmannJson_FOUND)
-        if(NOT TARGET nlohmann_json::nlohmann_json AND TARGET nlohmann::json)
-            add_library(nlohmann_json::nlohmann_json ALIAS nlohmann::json)
-        endif()
-    else()
-        message(STATUS "Using fallback method for nlohmann/json")
-        include_directories(C:/json/include)
-        add_library(nlohmann_json_dummy INTERFACE)
-        add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json_dummy)
-    endif()
-endif()
+find_package(nlohmann_json CONFIG REQUIRED)
 
 # -----------------------------------------------------------------------------
 # Source & resource files
@@ -85,7 +69,8 @@ set(HTML_RESOURCES
         "src/UI/HTML/main_overlay.html"
         "src/UI/HTML/price_check_module.html"
         "src/UI/HTML/settings.html"
-        "src/UI/HTML/welcome.html")
+        "src/UI/HTML/welcome.html"
+        "src/UI/HTML/browser.html")
 
 # -----------------------------------------------------------------------------
 # Target
