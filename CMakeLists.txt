@@ -137,16 +137,6 @@ set(HTML_RESOURCES
 # -----------------------------------------------------------------------------
 add_executable(Nexile WIN32 ${SOURCES} ${RESOURCE_FILES})
 
-# CEF C API specific compile definitions
-target_compile_definitions(Nexile PRIVATE
-        UNICODE
-        _UNICODE
-        NOMINMAX
-        WIN32_LEAN_AND_MEAN
-        USING_CEF_CAPI=1                    # Flag to indicate C API usage
-        CEF_VERSION_MAJOR=120               # Adjust to your CEF version
-)
-
 # FIXED: Conditional debug flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_CONFIGURATION_TYPES)
     target_compile_definitions(Nexile PRIVATE

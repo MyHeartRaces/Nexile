@@ -8,6 +8,7 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <shellapi.h>  // ADD THIS LINE
 
 #include "../UI/OverlayWindow.h"
 #include "../Modules/ModuleInterface.h"

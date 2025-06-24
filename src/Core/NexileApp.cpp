@@ -11,6 +11,7 @@
 // FIXED: CEF C API include (only what we need)
 #include "include/cef_app.h"  // Only for cef_do_message_loop_work
 #include <Psapi.h>           // For memory monitoring
+#include <nlohmann/json.hpp>
 
 #include <iostream>
 #include <sstream>
